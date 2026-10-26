@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
+<title>书斋</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  ============================================================
+  书斋 · 需求清单（v0.8.1）
+  ------------------------------------------------------------
+  1. 书库：添加 / 删除 / 查询书籍；状态：待读、在读、已读、弃读、已重读（底色区分）
+     - 添加书籍表单的标签区可直接新建标签并自动选中
+  2. 书籍详情：状态、基本信息、所属书单、打分、简评
+     - 可从已有书单中选择加入 / 移出，也可在弹窗内新建书单
+     - 摘录可即时编辑内容与感想
+  3. 标签：预置常用标签，可新建、重命名、删除；点击标签进书库筛选
+     - 标签页支持搜索标签
+  4. 摘录：对应书籍，可选感想；独立摘录库，按时间倒序，支持关键词搜索
+     - 添加摘录时书籍改为搜索选择
+     - 摘录内容与感想可即时编辑
+     - 摘录库内单条内容限 5 行，点击展开 / 收起
+  5. 书单：自定义添加，手动排序；一书可属多个书单
+     - 书单内添加书籍时支持搜索书名 / 作者 / 标签
+     - 添加书籍后书单与候选列表即时刷新
+  6. 首页：
+     - 快捷入口：书库 / 摘录 / 书单 / 标签
+     - 快捷添加书籍按钮（整行）
+     - 阅读状态统计
+     - 正在读
+     - 最新动态：最近修改阅读状态的三本书，书名 + 状态 + 日期
+     - 最近摘录：三条，书名 + 摘录内容，限三行，点击展开 / 收起
+     - 书斋标题可点击改名；顶部显示日期 + 星期
+  7. 设置：JSON 导出 / 导入备份；清空数据；退出登录
+  8. v0.8.1：接入 Supabase 云端存储（邮箱登录 + 行级安全数据隔离）
+     - 修复 Supabase SDK 全局变量冲突（supabase → sb）
+  ============================================================
+-->
+<style>
+:root{
+  --fg:#111;--sub:#8a8a8a;--sub2:#b3b3b3;--line:#ededed;--soft:#f7f7f7;
+  --danger:#c0392b;
+  --st-todo-bg:#f2f2f2;--st-todo-fg:#6b6b6b;
+  --st-reading-bg:#e9f1fe;--st-reading-fg:#2f6fdc;
+  --st-done-bg:#e8f6ee;--st-done-fg:#2e8b57;
+  --st-dropped-bg:#fdecec;--st-dropped-fg:#c0392b;
+  --st-reread-bg:#f1edfd;--st-reread-fg:#6c4bd4;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Helvetica Neue",Arial,sans-serif;
+  background:#fff;color:var(--fg);font-size:15px;line-height:1.55;
+  padding-bottom:calc(64px + env(safe-area-inset-bottom));
+}
+button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:15px;color:var(--fg)}
+h1,h2,h3{margin:0;font-weight:600}
+.page{padding:0 16px 24px;max-width:640px;margin:0 auto}
+
+/* 顶栏 */
+.topbar{display:flex;align-items:center;gap:8px;height:56px;position:sticky;top:0;background:#fff;z-index:10}
+.topbar h1{font-size:20px;letter-spacing:.3px;flex:1}
+.topbar-title{font-size:16px;font-weight:600;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;color:var(--fg)}
+.btn-icon:active{background:var(--soft)}
+.btn-text{font-size:14px;color:var(--fg);padding:6px 4px}
+.btn-mini{font-size:12px;padding:4px 8px;border-radius:8px;background:var(--soft);color:#555;white-space:nowrap}
+.btn-mini:disabled{opacity:.3}
+.btn-mini.danger{color:var(--danger)}
+.btn-ghost{border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-size:14px;background:#fff}
+.btn-ghost.danger{color:var(--danger)}
+.btn-primary{background:var(--fg);color:#fff;border-radius:12px;padding:10px 20px;font-size:14px;font-weight:500}
+
+/* 首页 */
+.hero{padding:18px 0 16px}
+.hero-date{font-size:12px;color:var(--sub);letter-spacing:.3px;margin-bottom:6px;font-variant-numeric:tabular-nums}
+.hero-hi{font-size:26px;font-weight:600;letter-spacing:.5px;display:inline-flex;align-items:center;gap:7px;text-align:left}
+.hero-hi:active{opacity:.55}
+.hero-hi-edit{font-size:13px;color:var(--sub2);font-weight:400;line-height:1}
+.hero-meta{font-size:13px;color:var(--sub);margin-top:4px}
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.qcard{border:1px solid var(--line);border-radius:14px;padding:12px 8px;text-align:center;background:#fff}
+.qcard:active{background:var(--soft)}
+.qcard-l{font-size:14px;font-weight:500}
+.qcard-s{font-size:11px;color:var(--sub);margin-top:2px}
+
+/* 快捷添加书籍 */
+.addbook{
+  display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+  margin-top:10px;padding:12px;border:1px dashed #d9d9d9;border-radius:14px;
+  font-size:14px;color:#555;background:#fff;letter-spacing:.2px;
+}
+.addbook:active{background:var(--soft);border-color:#c6c6c6}
+.addbook .plus{font-size:16px;line-height:1;color:var(--sub);font-weight:400}
+
+.sec{margin-top:26px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--sub);margin-bottom:10px}
+.sec-h a{font-size:12px;color:var(--sub2)}
+.statgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:10px 4px;text-align:center}
+.stat:active{background:var(--soft)}
+.stat-n{font-size:18px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat-l{font-size:11px;color:var(--sub);margin-top:2px}
+
+/* 列表行 */
+.row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row-main{flex:1;min-width:0}
+.row-title{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-sub{font-size:12px;color:var(--sub);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.row-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.row-rate{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
+.row-ops{display:flex;gap:6px;flex-shrink:0}
+
+/* 紧凑行（最新动态） */
+.minirow{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px;width:100%;text-align:left;background:none}
+.minirow:last-child{border-bottom:0}
+.minirow:active{opacity:.6}
+.minirow-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:14px}
+.minirow-d{font-size:12px;color:var(--sub2);flex-shrink:0;font-variant-numeric:tabular-nums;margin-left:2px}
+
+/* 首页摘录 */
+.hquote{padding:13px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.hquote:last-child{border-bottom:0}
+.hquote-head{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.hquote-title{flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hquote-arrow{font-size:11px;color:var(--sub2);transition:transform .18s ease;flex-shrink:0;line-height:1}
+.hquote-arrow.open{transform:rotate(180deg)}
+.hquote-text{font-size:13.5px;line-height:1.72;color:#444;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.hquote-text.open{-webkit-line-clamp:unset;overflow:visible}
+
+/* 状态 */
+.pill{display:inline-flex;align-items:center;font-size:12px;padding:3px 9px;border-radius:999px;font-weight:500;white-space:nowrap}
+.st-todo{background:var(--st-todo-bg);color:var(--st-todo-fg)}
+.st-reading{background:var(--st-reading-bg);color:var(--st-reading-fg)}
+.st-done{background:var(--st-done-bg);color:var(--st-done-fg)}
+.st-dropped{background:var(--st-dropped-bg);color:var(--st-dropped-fg)}
+.st-reread{background:var(--st-reread-bg);color:var(--st-reread-fg)}
+
+/* 标签 */
+.tag{display:inline-flex;align-items:center;font-size:12px;padding:3px 9px;border-radius:8px;border:1px solid var(--line);color:#555;background:#fff;line-height:1.4}
+.tag.on{background:var(--fg);color:#fff;border-color:var(--fg)}
+
+/* 搜索/筛选 */
+.search{margin:4px 0 10px}
+.search input{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--soft);outline:none}
+.search input:focus{background:#fff;border-color:#ddd}
+.chiprow{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chiprow::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;font-size:13px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);color:#555;background:#fff;white-space:nowrap}
+.chip.on{background:var(--fg);color:#fff;border-color:var(--fg)}
+
+/* 详情 */
+.detail{padding-top:6px}
+.d-title{font-size:24px;font-weight:600;line-height:1.35}
+.d-orig{font-size:13px;color:var(--sub);margin-top:4px}
+.d-row{display:flex;align-items:center;gap:10px;margin:14px 0 18px}
+.d-meta{font-size:13px;color:var(--sub)}
+.d-line{display:flex;gap:14px;padding:11px 0;border-top:1px solid var(--line);font-size:14px}
+.d-line .k{color:var(--sub);width:56px;flex-shrink:0;font-size:13px}
+.d-block{padding:14px 0;border-top:1px solid var(--line)}
+.d-block .k{color:var(--sub);font-size:13px;margin-bottom:8px}
+.d-block .k-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.d-block .k-head>span{color:var(--sub);font-size:13px}
+.d-review{font-size:14px;line-height:1.7;white-space:pre-wrap;color:#333}
+.tagwrap{display:flex;flex-wrap:wrap;gap:6px}
+.d-actions{display:flex;gap:10px;margin-top:22px}
+.d-actions button{flex:1}
+
+/* 摘录 */
+.quote{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+.quote-text{font-size:14px;line-height:1.75;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.quote-text.open{-webkit-line-clamp:unset;overflow:visible}
+.quote-text-static{font-size:14px;line-height:1.75;white-space:pre-wrap}
+.quote-thought{font-size:13px;color:#666;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);line-height:1.7;white-space:pre-wrap}
+.quote-meta{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--sub)}
+.qbook{font-size:12px;color:var(--fg);font-weight:500;background:var(--soft);padding:3px 9px;border-radius:8px}
+.qedit{margin-left:auto;font-size:12px;color:var(--sub2)}
+.qdel{font-size:12px;color:var(--sub2)}
+
+/* 书籍选择器 */
+.picker-results{margin-top:6px;max-height:220px;overflow-y:auto}
+.picker-item{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:#fff;font-size:14px}
+.picker-item:active{background:var(--soft)}
+.picker-sub{font-size:12px;color:var(--sub);margin-top:1px}
+.picker-empty{font-size:12px;color:var(--sub2);padding:6px 2px}
+.picked{font-size:13px;color:#555;margin-top:6px}
+.field-static{padding:10px 12px;background:var(--soft);border-radius:11px;font-size:15px}
+
+/* 书单 */
+.listrow{display:flex;align-items:center;gap:10px;padding:15px 0;border-bottom:1px solid var(--line)}
+.chev{color:var(--sub2);font-size:18px}
+.listtools{display:flex;gap:10px;margin:6px 0 14px}
+.listtools button{flex:1}
+
+/* 标签管理 */
+.tagline{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--line)}
+.tagline .tag{min-width:auto}
+.tagcount{font-size:12px;color:var(--sub2);flex:1}
+
+/* 空状态 */
+.empty{text-align:center;color:var(--sub2);font-size:13px;padding:38px 0}
+
+/* 底部导航 */
+#tabbar{
+  position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(255,255,255,.96);
+  backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);
+  border-top:1px solid var(--line);z-index:50;padding-bottom:env(safe-area-inset-bottom);
+}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 7px;color:var(--sub2)}
+.tab.on{color:var(--fg)}
+.tab-ico{width:22px;height:22px;display:block}
+.tab-ico svg{width:22px;height:22px;display:block}
+.tab-lb{font-size:10px;letter-spacing:.2px}
+
+/* 弹窗 */
+#modalRoot .overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:100;display:flex;align-items:flex-end;justify-content:center;
+  animation:fade .16s ease;
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal{
+  background:#fff;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;border-radius:20px 20px 0 0;
+  padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:up .2s ease;
+}
+@keyframes up{from{transform:translateY(18px);opacity:.6}to{transform:none;opacity:1}}
+.modal-h{font-size:17px;font-weight:600;margin-bottom:16px}
+.field{display:block;margin-bottom:14px}
+.field>span{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--sub);margin-bottom:6px}
+.field>span i{color:var(--danger);font-style:normal}
+.field>span b{font-weight:600;color:var(--fg);font-size:13px;font-variant-numeric:tabular-nums}
+.field input[type=text],.field input:not([type]),.field select,.field textarea{
+  width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--soft);outline:none;resize:vertical;
+}
+.field input:focus,.field select:focus,.field textarea:focus{background:#fff;border-color:#ddd}
+.field input[type=range]{width:100%;margin:2px 0;-webkit-appearance:none;height:26px;background:transparent}
+.field input[type=range]::-webkit-slider-runnable-track{height:4px;background:#eee;border-radius:2px}
+.field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid var(--fg);margin-top:-9px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.segs{display:flex;gap:6px;flex-wrap:wrap}
+.seg{flex:1;min-width:60px;font-size:12.5px;padding:8px 4px;border-radius:10px;border:1px solid var(--line);color:#555;background:#fff;white-space:nowrap}
+.seg.on{background:var(--fg);color:#fff;border-color:var(--fg)}
+.modal-actions{display:flex;gap:10px;margin-top:22px}
+.modal-actions button{flex:1;padding:12px}
+.hint{font-size:12px;color:var(--sub);margin:0 0 10px}
+.export-area{width:100%;height:160px;border:1px solid var(--line);border-radius:11px;padding:10px;font-size:11px;background:var(--soft);font-family:ui-monospace,Menlo,monospace}
+
+/* 设置 */
+.setting-row{display:flex;align-items:center;width:100%;padding:15px 0;border-bottom:1px solid var(--line);font-size:15px;text-align:left;background:none}
+.setting-row.danger{color:var(--danger)}
+.setting-row.plain{color:var(--sub);font-size:13px}
+
+/* 需求清单弹窗 */
+.req{font-size:13px;line-height:1.75;color:#333}
+.req h3{font-size:13.5px;font-weight:600;margin:16px 0 6px;color:var(--fg)}
+.req h3:first-child{margin-top:0}
+.req ul{margin:0;padding-left:18px}
+.req li{margin:2px 0}
+
+/* 登录页 */
+.auth-wrap{max-width:360px;margin:80px auto;padding:0 24px}
+.auth-title{font-size:24px;font-weight:600;margin-bottom:24px}
+.auth-input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:15px;background:var(--soft);outline:none}
+.auth-input:focus{background:#fff;border-color:#ddd}
+.auth-btn{width:100%;padding:14px;background:var(--fg);color:#fff;border-radius:10px;font-size:15px;font-weight:500}
+.auth-btn:disabled{opacity:.6}
+.auth-msg{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
+.auth-foot{font-size:12px;color:var(--sub2);margin-top:24px;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<nav id="tabbar"></nav>
+<div id="modalRoot"></div>
+
+<script>
+/* ============================================================
+   1. 常量
+   ============================================================ */
+const DB_KEY = 'bl_bookshelf_v1';   /* 旧版本 localStorage 键，保留用于迁移 */
+
+const REGIONS = ['中国大陆','港澳台','日本','韩国','欧美','东南亚','其他'];
+const TYPES   = ['原创','同人','严肃文学'];
+const STATUSES = [
+  {key:'todo',    label:'待读'},
+  {key:'reading', label:'在读'},
+  {key:'done',    label:'已读'},
+  {key:'dropped', label:'弃读'},
+  {key:'reread',  label:'已重读'},
+];
+const STATUS_MAP = Object.fromEntries(STATUSES.map(s=>[s.key,s.label]));
+const DEFAULT_TAGS = ['甜文','虐文','ABO','无限流','校园','都市','古代','重生','系统','娱乐圈','破镜重圆','追妻火葬场','短篇','长篇'];
+
+const TABS = [
+  {name:'home',label:'首页'},
+  {name:'library',label:'书库'},
+  {name:'quotes',label:'摘录'},
+  {name:'lists',label:'书单'},
+  {name:'settings',label:'设置'},
+];
+const ICONS = {
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/></svg>',
+  library:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M9 3v18"/></svg>',
+  quotes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6.5H5.5v6h4L7 17"/><path d="M18.5 6.5h-4v6h4L16 17"/></svg>',
+  lists:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M4 12h16M4 17.5h10"/></svg>',
+  settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
+};
+const TAB_ROUTE = {home:'home',library:'library',book:'library',tags:'library',quotes:'quotes',bookquotes:'quotes',lists:'lists',list:'lists',settings:'settings'};
+
+/* ============================================================
+   2. 工具
+   ============================================================ */
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = p => (p||'x') + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+function fmtDate(ts){const d=new Date(ts),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;}
+function fmtDateTime(ts){const d=new Date(ts),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
+function fmtCnDate(d){
+  const w = '日一二三四五六'[d.getDay()];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 周${w}`;
+}
+function statusPill(st){return `<span class="pill st-${st}">${STATUS_MAP[st]||st}</span>`;}
+
+/* ============================================================
+   3. 数据层（Supabase 云端存储）
+   ============================================================ */
+let db = null;
+
+/* ⚠️ 在这里填入你自己的 Supabase 项目信息 */
+const SUPABASE_URL = 'https://bdtadwgfecqebhkgkmaj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkdGFkd2dmZWNxZWJoa2drbWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDA0NTEsImV4cCI6MjEwODU3NjQ1MX0.huXw_x8SAdN8q2gdJjW_XXo5Fik9Zy8R0E6ckc-qvro';
+
+/* 注意：变量名用 sb，避免与 SDK 挂载的 window.supabase 冲突 */
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function seedDB(){
+  return {
+    version: 2,
+    settings: { title: '我的书斋' },
+    books: [],
+    tags: DEFAULT_TAGS.map(n=>({id:uid('t'), name:n, builtin:true})),
+    lists: [],
+    quotes: [],
+  };
+}
+
+const Store = {
+  /* 从 Supabase 拉取当前登录用户的全部数据，组装成前端使用的 db 结构 */
+  async load(){
+    const { data: { user }, error: ue } = await sb.auth.getUser();
+    if(ue || !user){ db = null; return; }
+
+    const [b, t, l, q] = await Promise.all([
+      sb.from('books').select('*').eq('user_id', user.id),
+      sb.from('tags').select('*').eq('user_id', user.id),
+      sb.from('lists').select('*').eq('user_id', user.id),
+      sb.from('quotes').select('*').eq('user_id', user.id),
+    ]);
+
+    db = {
+      version: 2,
+      settings: { title: '我的书斋' },
+      books: (b.data || []).map(row => ({
+        id: row.id,
+        title: row.title,
+        originalTitle: row.original_title || '',
+        author: row.author || '',
+        region: row.region || '中国大陆',
+        type: row.type || '原创',
+        status: row.status || 'todo',
+        rating: Number(row.rating) || 0,
+        review: row.review || '',
+        tags: row.tags || [],
+        createdAt: Number(row.created_at) || Date.now(),
+        updatedAt: Number(row.updated_at) || Date.now(),
+        statusUpdatedAt: Number(row.status_updated_at) || Date.now(),
+      })),
+      tags: (t.data || []).map(row => ({ id: row.id, name: row.name, builtin: !!row.builtin })),
+      lists: (l.data || []).map(row => ({ id: row.id, name: row.name, bookIds: row.book_ids || [] })),
+      quotes: (q.data || []).map(row => ({
+        id: row.id,
+        bookId: row.book_id,
+        text: row.text,
+        thought: row.thought || '',
+        createdAt: Number(row.created_at) || Date.now(),
+      })),
+    };
+
+    /* 新用户首次登录：没有标签则写入预置标签 */
+    if(db.tags.length === 0){
+      db.tags = DEFAULT_TAGS.map(n => ({ id: uid('t'), name: n, builtin: true }));
+      await Store.save();
+    }
+  },
+
+  /* 全量覆盖当前用户的数据（对两个人使用量级完全够用） */
+  async save(){
+    const { data: { user } } = await sb.auth.getUser();
+    if(!user || !db) return;
+    const uidv = user.id;
+
+    /* 先清空当前用户旧数据 */
+    await Promise.all([
+      sb.from('books').delete().eq('user_id', uidv),
+      sb.from('tags').delete().eq('user_id', uidv),
+      sb.from('lists').delete().eq('user_id', uidv),
+      sb.from('quotes').delete().eq('user_id', uidv),
+    ]);
+
+    /* 再批量写入 */
+    const tasks = [];
+    if(db.books.length){
+      tasks.push(sb.from('books').insert(db.books.map(b => ({
+        id: b.id, user_id: uidv,
+        title: b.title,
+        original_title: b.originalTitle || '',
+        author: b.author || '',
+        region: b.region,
+        type: b.type,
+        status: b.status,
+        rating: b.rating || 0,
+        review: b.review || '',
+        tags: b.tags || [],
+        created_at: b.createdAt,
+        updated_at: b.updatedAt,
+        status_updated_at: b.statusUpdatedAt,
+      }))));
+    }
+    if(db.tags.length){
+      tasks.push(sb.from('tags').insert(db.tags.map(t => ({
+        id: t.id, user_id: uidv, name: t.name, builtin: !!t.builtin,
+      }))));
+    }
+    if(db.lists.length){
+      tasks.push(sb.from('lists').insert(db.lists.map(l => ({
+        id: l.id, user_id: uidv, name: l.name, book_ids: l.bookIds || [],
+      }))));
+    }
+    if(db.quotes.length){
+      tasks.push(sb.from('quotes').insert(db.quotes.map(q => ({
+        id: q.id, user_id: uidv, book_id: q.bookId, text: q.text,
+        thought: q.thought || '', created_at: q.createdAt,
+      }))));
+    }
+
+    const results = await Promise.all(tasks);
+    const failed = results.find(r => r.error);
+    if(failed) console.error('保存到云端失败：', failed.error);
+  },
+
+  /* 退出登录 */
+  async signOut(){
+    await sb.auth.signOut();
+    db = null;
+  }
+};
+
+/* ============================================================
+   4. 路由
+   ============================================================ */
+let route = {name:'home', params:{}};
+let navStack = [];
+
+function go(name, params={}){ navStack.push({name:route.name,params:route.params}); route={name,params}; render(); window.scrollTo(0,0); }
+function back(){ route = navStack.pop() || {name:'home',params:{}}; render(); window.scrollTo(0,0); }
+function switchTab(name){ navStack=[]; route={name,params:{}}; render(); window.scrollTo(0,0); }
+
+let libFilter = { q:'', status:'all', tag:null };
+let quoteFilter = { q:'' };
+let tagFilter = { q:'' };
+let pickFilter = { q:'' };
+let currentPickListId = null;
+let expandedQuotes = new Set();
+let expandedQuoteCards = new Set();
+
+/* ============================================================
+   5. 渲染入口
+   ============================================================ */
+function render(){
+  const app = document.getElementById('app');
+  let html = '';
+  switch(route.name){
+    case 'home':       html = viewHome(); break;
+    case 'library':    html = viewLibrary(); break;
+    case 'book':       html = viewBook(route.params.id); break;
+    case 'tags':       html = viewTags(); break;
+    case 'quotes':     html = viewQuotes(); break;
+    case 'bookquotes': html = viewBookQuotes(route.params.id); break;
+    case 'lists':      html = viewLists(); break;
+    case 'list':       html = viewList(route.params.id); break;
+    case 'settings':   html = viewSettings(); break;
+    default:           html = viewHome();
+  }
+  app.innerHTML = html;
+  renderTabbar();
+}
+
+function renderTabbar(){
+  const cur = TAB_ROUTE[route.name] || 'home';
+  document.getElementById('tabbar').innerHTML = TABS.map(t=>`
+    <button class="tab ${cur===t.name?'on':''}" data-act="switchTab" data-tab="${t.name}">
+      <span class="tab-ico">${ICONS[t.name]}</span>
+      <span class="tab-lb">${t.label}</span>
+    </button>`).join('');
+}
+
+/* ============================================================
+   6. 通用片段
+   ============================================================ */
+function bookRow(b){
+  const tags = (b.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+  return `<div class="row" data-act="openBook" data-id="${b.id}">
+    <div class="row-main">
+      <div class="row-title">${esc(b.title)}</div>
+      <div class="row-sub">${esc(b.author||'佚名')} · ${esc(b.region)} · ${esc(b.type)}</div>
+      ${tags?`<div class="row-tags">${tags}</div>`:''}
+    </div>
+    <div class="row-right">
+      ${statusPill(b.status)}
+      ${b.rating>0?`<div class="row-rate">${b.rating.toFixed(1)}</div>`:''}
+    </div>
+  </div>`;
+}
+
+function quoteCard(q){
+  const b = db.books.find(x=>x.id===q.bookId);
+  const open = expandedQuoteCards.has(q.id);
+  return `<div class="quote">
+    <div class="quote-text ${open?'open':''}" data-act="toggleCardQuote" data-id="${q.id}">${esc(q.text)}</div>
+    ${q.thought?`<div class="quote-thought">${esc(q.thought)}</div>`:''}
+    <div class="quote-meta">
+      <button class="qbook" data-act="openBook" data-id="${q.bookId}">${esc(b?b.title:'未知书籍')}</button>
+      <span>${fmtDate(q.createdAt)}</span>
+      <button class="qedit" data-act="editQuote" data-id="${q.id}">编辑</button>
+      <button class="qdel" data-act="delQuote" data-id="${q.id}">删除</button>
+    </div>
+  </div>`;
+}
+
+function homeQuote(q){
+  const b = db.books.find(x=>x.id===q.bookId);
+  const open = expandedQuotes.has(q.id);
+  return `<div class="hquote" data-act="toggleQuote" data-id="${q.id}">
+    <div class="hquote-head">
+      <div class="hquote-title">${esc(b?b.title:'未知书籍')}</div>
+      <span class="hquote-arrow ${open?'open':''}">▾</span>
+    </div>
+    <div class="hquote-text ${open?'open':''}">${esc(q.text)}</div>
+  </div>`;
+}
+
+/* ============================================================
+   7. 视图：首页
+   ============================================================ */
+function viewHome(){
+  const books = db.books;
+  const counts = {}; STATUSES.forEach(s=>counts[s.key]=0);
+  books.forEach(b=>{ if(counts[b.status]!=null) counts[b.status]++; });
+  const rated = books.filter(b=>b.rating>0);
+  const avg = rated.length ? (rated.reduce((a,b)=>a+b.rating,0)/rated.length).toFixed(1) : '—';
+  const reading = books.filter(b=>b.status==='reading').sort((a,b)=>b.updatedAt-a.updatedAt);
+  const recentActivity  = books.slice()
+    .filter(b=>b.statusUpdatedAt)
+    .sort((a,b)=>b.statusUpdatedAt-a.statusUpdatedAt)
+    .slice(0,3);
+  const recentQuotes = db.quotes.slice().sort((a,b)=>b.createdAt-a.createdAt).slice(0,3);
+  const title = (db.settings && db.settings.title) || '我的书斋';
+
+  return `<div class="page">
+    <header class="hero">
+      <div class="hero-date">${fmtCnDate(new Date())}</div>
+      <button class="hero-hi" data-act="renameHomeTitle">${esc(title)}<span class="hero-hi-edit">✎</span></button>
+      <div class="hero-meta">共 ${books.length} 本 · 已读 ${counts.done} 本 · 均分 ${avg}</div>
+    </header>
+
+    <div class="quick">
+      <button class="qcard" data-act="switchTab" data-tab="library"><div class="qcard-l">书库</div><div class="qcard-s">${books.length} 本</div></button>
+      <button class="qcard" data-act="switchTab" data-tab="quotes"><div class="qcard-l">摘录</div><div class="qcard-s">${db.quotes.length} 条</div></button>
+      <button class="qcard" data-act="switchTab" data-tab="lists"><div class="qcard-l">书单</div><div class="qcard-s">${db.lists.length} 个</div></button>
+      <button class="qcard" data-act="go" data-to="tags"><div class="qcard-l">标签</div><div class="qcard-s">${db.tags.length} 个</div></button>
+    </div>
+
+    <button class="addbook" data-act="newBook"><span class="plus">＋</span> 添加书籍</button>
+
+    <section class="sec">
+      <div class="sec-h"><span>阅读状态</span></div>
+      <div class="statgrid">
+        ${STATUSES.map(s=>`<div class="stat" data-act="filterStatus" data-status="${s.key}">
+          <div class="stat-n">${counts[s.key]}</div>
+          <div class="stat-l">${s.label}</div>
+        </div>`).join('')}
+      </div>
+    </section>
+
+    ${reading.length?`<section class="sec">
+      <div class="sec-h"><span>正在读</span><a data-act="filterStatus" data-status="reading">全部</a></div>
+      ${reading.slice(0,3).map(bookRow).join('')}
+    </section>`:''}
+
+    <section class="sec">
+      <div class="sec-h"><span>最新动态</span><a data-act="switchTab" data-tab="library">书库</a></div>
+      ${recentActivity.length
+        ? recentActivity.map(b=>`<button class="minirow" data-act="openBook" data-id="${b.id}">
+            <span class="minirow-t">${esc(b.title)}</span>
+            ${statusPill(b.status)}
+            <span class="minirow-d">${fmtDate(b.statusUpdatedAt)}</span>
+          </button>`).join('')
+        : '<div class="empty">还没有阅读记录</div>'}
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><span>最近摘录</span><a data-act="switchTab" data-tab="quotes">全部</a></div>
+      ${recentQuotes.length
+        ? recentQuotes.map(homeQuote).join('')
+        : '<div class="empty">还没有摘录</div>'}
+    </section>
+  </div>`;
+}
+
+/* ============================================================
+   8. 视图：书库
+   ============================================================ */
+function viewLibrary(){
+  return `<div class="page">
+    <header class="topbar">
+      <h1>书库</h1>
+      <button class="btn-icon" data-act="newBook">＋</button>
+    </header>
+    <div class="search">
+      <input id="libSearch" type="search" placeholder="搜索书名 / 作者 / 标签" value="${esc(libFilter.q)}">
+    </div>
+    <div class="chiprow">
+      <button class="chip ${libFilter.status==='all'?'on':''}" data-act="setStatusFilter" data-status="all">全部</button>
+      ${STATUSES.map(s=>`<button class="chip ${libFilter.status===s.key?'on':''}" data-act="setStatusFilter" data-status="${s.key}">${s.label}</button>`).join('')}
+    </div>
+    ${libFilter.tag?`<div class="chiprow"><button class="chip on" data-act="clearTagFilter">标签：${esc(libFilter.tag)} ✕</button></div>`:''}
+    <div id="bookList">${bookListHTML()}</div>
+  </div>`;
+}
+
+function bookListHTML(){
+  let arr = db.books.slice();
+  if(libFilter.status!=='all') arr = arr.filter(b=>b.status===libFilter.status);
+  if(libFilter.tag) arr = arr.filter(b=>(b.tags||[]).includes(libFilter.tag));
+  const q = libFilter.q.trim().toLowerCase();
+  if(q){
+    arr = arr.filter(b=>{
+      const hay = [b.title,b.originalTitle,b.author,...(b.tags||[])].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  arr.sort((a,b)=>b.updatedAt-a.updatedAt);
+  if(!arr.length) return `<div class="empty">没有找到书籍</div>`;
+  return arr.map(bookRow).join('');
+}
+
+/* ============================================================
+   9. 视图：书籍详情
+   ============================================================ */
+function viewBook(id){
+  const b = db.books.find(x=>x.id===id);
+  if(!b) return `<div class="page"><div class="empty">书籍不存在</div></div>`;
+  const quotes = db.quotes.filter(q=>q.bookId===id).sort((a,c)=>c.createdAt-a.createdAt);
+  const inLists = db.lists.filter(l=>l.bookIds.includes(id));
+  const tagHtml = (b.tags||[]).length
+    ? b.tags.map(t=>`<button class="tag" data-act="tagToLibrary" data-name="${esc(t)}">${esc(t)}</button>`).join('')
+    : '<span style="color:#b3b3b3;font-size:13px">无标签</span>';
+
+  return `<div class="page">
+    <header class="topbar">
+      <button class="btn-icon" data-act="back">‹</button>
+      <h1 class="topbar-title">书籍详情</h1>
+      <button class="btn-text" data-act="editBook" data-id="${id}">编辑</button>
+    </header>
+
+    <div class="detail">
+      <div class="d-title">${esc(b.title)}</div>
+      ${b.originalTitle?`<div class="d-orig">${esc(b.originalTitle)}</div>`:''}
+      <div class="d-row">${statusPill(b.status)}<span class="d-meta">${esc(b.region)} · ${esc(b.type)}</span></div>
+
+      ${b.author?`<div class="d-line"><span class="k">作者</span><span>${esc(b.author)}</span></div>`:''}
+      <div class="d-line"><span class="k">评分</span><span>${b.rating>0?b.rating.toFixed(1)+' / 10':'未评分'}</span></div>
+      <div class="d-line"><span class="k">加入时间</span><span>${fmtDate(b.createdAt)}</span></div>
+
+      <div class="d-block">
+        <div class="k">标签</div>
+        <div class="tagwrap">${tagHtml}</div>
+      </div>
+
+      <div class="d-block">
+        <div class="k-head">
+          <span>所属书单</span>
+          <button class="btn-mini" data-act="addToLists" data-id="${id}">＋ 添加书单</button>
+        </div>
+        <div class="tagwrap">${inLists.length
+          ? inLists.map(l=>`<button class="tag" data-act="openList" data-id="${l.id}">${esc(l.name)}</button>`).join('')
+          : '<span style="color:#b3b3b3;font-size:13px">暂未加入书单</span>'}</div>
+      </div>
+
+      <div class="d-block">
+        <div class="k">简评</div>
+        <div class="d-review">${b.review?esc(b.review):'<span style="color:#b3b3b3;font-size:13px">暂无</span>'}</div>
+      </div>
+
+      <div class="d-block">
+        <div class="k-head">
+          <span>摘录（${quotes.length}）</span>
+          <button class="btn-mini" data-act="newQuoteFor" data-id="${id}">添加摘录</button>
+        </div>
+        ${quotes.length
+          ? quotes.map(q=>`<div class="quote">
+              <div class="quote-text-static">${esc(q.text)}</div>
+              ${q.thought?`<div class="quote-thought">${esc(q.thought)}</div>`:''}
+              <div class="quote-meta">
+                <span>${fmtDate(q.createdAt)}</span>
+                <button class="qedit" data-act="editQuote" data-id="${q.id}">编辑</button>
+                <button class="qdel" data-act="delQuote" data-id="${q.id}">删除</button>
+              </div>
+            </div>`).join('')
+          : '<div class="empty" style="padding:20px 0">还没有摘录</div>'}
+      </div>
+
+      <div class="d-actions">
+        <button class="btn-ghost" data-act="delBook" data-id="${id}">删除这本书</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   10. 视图：标签管理（含搜索）
+   ============================================================ */
+function viewTags(){
+  return `<div class="page">
+    <header class="topbar">
+      <button class="btn-icon" data-act="back">‹</button>
+      <h1 class="topbar-title">标签</h1>
+      <button class="btn-icon" data-act="newTag">＋</button>
+    </header>
+    <div class="search">
+      <input id="tagSearch" type="search" placeholder="搜索标签" value="${esc(tagFilter.q)}">
+    </div>
+    <div id="tagList">${tagListHTML()}</div>
+  </div>`;
+}
+
+function tagListHTML(){
+  const q = tagFilter.q.trim().toLowerCase();
+  let arr = db.tags;
+  if(q) arr = arr.filter(t=>t.name.toLowerCase().includes(q));
+  if(!arr.length) return `<div class="empty">${q?'没有找到标签':'还没有标签'}</div>`;
+  return arr.map(t=>{
+    const n = db.books.filter(b=>(b.tags||[]).includes(t.name)).length;
+    return `<div class="tagline">
+      <button class="tag" data-act="tagToLibrary" data-name="${esc(t.name)}">${esc(t.name)}</button>
+      <span class="tagcount">${n} 本</span>
+      <button class="btn-mini" data-act="renameTag" data-id="${t.id}">重命名</button>
+      <button class="btn-mini danger" data-act="delTag" data-id="${t.id}">删除</button>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
+   11. 视图：摘录库
+   ============================================================ */
+function viewQuotes(){
+  return `<div class="page">
+    <header class="topbar">
+      <h1>摘录库</h1>
+      <button class="btn-icon" data-act="newQuote">＋</button>
+    </header>
+    <div class="search">
+      <input id="quoteSearch" type="search" placeholder="搜索摘录 / 感想 / 书名" value="${esc(quoteFilter.q)}">
+    </div>
+    <div id="quoteList">${quoteListHTML()}</div>
+  </div>`;
+}
+
+function quoteListHTML(){
+  let arr = db.quotes.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  const q = quoteFilter.q.trim().toLowerCase();
+  if(q){
+    arr = arr.filter(x=>{
+      const b = db.books.find(b=>b.id===x.bookId);
+      return [x.text, x.thought||'', b?b.title:''].join(' ').toLowerCase().includes(q);
+    });
+  }
+  if(!arr.length) return `<div class="empty">没有找到摘录</div>`;
+  return arr.map(quoteCard).join('');
+}
+
+function viewBookQuotes(id){
+  const b = db.books.find(x=>x.id===id);
+  const qs = db.quotes.filter(q=>q.bookId===id).sort((a,c)=>c.createdAt-a.createdAt);
+  return `<div class="page">
+    <header class="topbar">
+      <button class="btn-icon" data-act="back">‹</button>
+      <h1 class="topbar-title">${esc(b?b.title:'')}</h1>
+      <button class="btn-icon" data-act="newQuoteFor" data-id="${id}">＋</button>
+    </header>
+    ${qs.length?qs.map(quoteCard).join(''):'<div class="empty">这本书还没有摘录</div>'}
+  </div>`;
+}
+
+/* ============================================================
+   12. 视图：书单
+   ============================================================ */
+function viewLists(){
+  return `<div class="page">
+    <header class="topbar">
+      <h1>书单</h1>
+      <button class="btn-icon" data-act="newList">＋</button>
+    </header>
+    ${db.lists.length
+      ? db.lists.map(l=>`<div class="listrow" data-act="openList" data-id="${l.id}">
+          <div class="row-main">
+            <div class="row-title">${esc(l.name)}</div>
+            <div class="row-sub">${l.bookIds.length} 本</div>
+          </div>
+          <div class="chev">›</div>
+        </div>`).join('')
+      : '<div class="empty">还没有书单</div>'}
+  </div>`;
+}
+
+function viewList(id){
+  const l = db.lists.find(x=>x.id===id);
+  if(!l) return `<div class="page"><div class="empty">书单不存在</div></div>`;
+  const books = l.bookIds.map(bid=>db.books.find(b=>b.id===bid)).filter(Boolean);
+  return `<div class="page">
+    <header class="topbar">
+      <button class="btn-icon" data-act="back">‹</button>
+      <h1 class="topbar-title">${esc(l.name)}</h1>
+      <button class="btn-text" data-act="renameList" data-id="${id}">重命名</button>
+    </header>
+    <div class="listtools">
+      <button class="btn-ghost" data-act="pickBooks" data-id="${id}">＋ 添加书籍</button>
+      <button class="btn-ghost danger" data-act="delList" data-id="${id}">删除书单</button>
+    </div>
+    ${books.length
+      ? books.map((b,i)=>`<div class="row">
+          <div class="row-main" data-act="openBook" data-id="${b.id}">
+            <div class="row-title">${i+1}. ${esc(b.title)}</div>
+            <div class="row-sub">${esc(b.author||'佚名')} · ${esc(b.region)}</div>
+          </div>
+          <div class="row-ops">
+            <button class="btn-mini" data-act="moveBookUp" data-list="${id}" data-bid="${b.id}" ${i===0?'disabled':''}>↑</button>
+            <button class="btn-mini" data-act="moveBookDown" data-list="${id}" data-bid="${b.id}" ${i===books.length-1?'disabled':''}>↓</button>
+            <button class="btn-mini danger" data-act="removeFromList" data-list="${id}" data-bid="${b.id}">移出</button>
+          </div>
+        </div>`).join('')
+      : '<div class="empty">书单还是空的</div>'}
+  </div>`;
+}
+
+/* ============================================================
+   13. 视图：设置
+   ============================================================ */
+function viewSettings(){
+  return `<div class="page">
+    <header class="topbar"><h1>设置</h1></header>
+    <div class="sec" style="margin-top:8px">
+      <div class="sec-h"><span>数据管理</span></div>
+      <button class="setting-row" data-act="exportData">导出备份（JSON）</button>
+      <button class="setting-row" data-act="importData">导入备份</button>
+      <button class="setting-row danger" data-act="clearAll">清空所有数据</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="sec">
+      <div class="sec-h"><span>账户</span></div>
+      <button class="setting-row danger" data-act="logout">退出登录</button>
+    </div>
+    <div class="sec">
+      <div class="sec-h"><span>关于</span></div>
+      <button class="setting-row" data-act="showRequirements">需求清单</button>
+      <div class="setting-row plain">数据已启用云端同步（Supabase）</div>
+      <div class="setting-row plain">版本 0.8.1</div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   14. 需求清单
+   ============================================================ */
+const REQ_DOC = `
+<div class="req">
+  <h3>1. 书库</h3>
+  <ul>
+    <li>添加、删除、查询书籍</li>
+    <li>状态：待读 / 在读 / 已读 / 弃读 / 已重读（底色区分）</li>
+    <li>添加书籍表单的标签区可直接新建标签，并自动选中</li>
+  </ul>
+  <h3>2. 书籍详情</h3>
+  <ul>
+    <li>显示状态、基本信息、所属书单、打分、简评</li>
+    <li>可从已有书单中选择加入 / 移出，也可在弹窗内新建书单</li>
+    <li>摘录可即时编辑内容与感想</li>
+  </ul>
+  <h3>3. 标签</h3>
+  <ul>
+    <li>预置常用标签，可新建、重命名、删除</li>
+    <li>点击标签进入书库筛选</li>
+    <li>标签页支持搜索标签</li>
+  </ul>
+  <h3>4. 摘录</h3>
+  <ul>
+    <li>对应到书，可选感想，独立摘录库</li>
+    <li>按时间倒序，支持关键词搜索</li>
+    <li>添加摘录时书籍改为搜索选择，不再使用下拉菜单</li>
+    <li>摘录内容与感想可即时编辑（摘录库、单书摘录页、书籍详情均可）</li>
+    <li>摘录库内单条内容最多显示 5 行，超出可点击展开 / 收起</li>
+  </ul>
+  <h3>5. 书单</h3>
+  <ul>
+    <li>自定义书单，手动排序（上移 / 下移）</li>
+    <li>一本书可属于多个书单</li>
+    <li>书单内添加书籍时支持搜索书名 / 原名 / 作者 / 标签</li>
+    <li>添加书籍后书单页与候选列表即时刷新</li>
+  </ul>
+  <h3>6. 首页</h3>
+  <ul>
+    <li>快捷入口：书库 / 摘录 / 书单 / 标签</li>
+    <li>快捷添加书籍：四个入口下方整行按钮，一键打开添加表单</li>
+    <li>阅读状态统计</li>
+    <li>正在读</li>
+    <li>最新动态：最近修改阅读状态的三本书，书名 + 状态 + 日期</li>
+    <li>最近摘录：三条，书名 + 摘录内容，限三行，点击展开 / 收起</li>
+    <li>书斋标题可点击改名，顶部显示日期 + 星期</li>
+  </ul>
+  <h3>7. 设置</h3>
+  <ul>
+    <li>JSON 导出 / 导入备份</li>
+    <li>清空数据</li>
+    <li>退出登录</li>
+  </ul>
+  <h3>8. 账户与云端（v0.8.1）</h3>
+  <ul>
+    <li>邮箱 + 密码登录</li>
+    <li>数据存储于 Supabase（PostgreSQL）</li>
+    <li>行级安全策略（RLS）：每个用户只能读写自己的数据，多人共用同一网页互不干扰</li>
+    <li>新用户首次登录自动写入预置标签</li>
+    <li>修复：Supabase SDK 全局变量 supabase 与代码变量重名导致的白屏问题，代码变量改名为 sb</li>
+  </ul>
+</div>`;
+
+/* ============================================================
+   15. 弹窗基础
+   ============================================================ */
+function openModal(html){
+  document.getElementById('modalRoot').innerHTML =
+    `<div class="overlay" id="modalOverlay"><div class="modal">${html}</div></div>`;
+}
+function closeModal(){
+  document.getElementById('modalRoot').innerHTML = '';
+  currentPickListId = null;
+}
+
+/* ============================================================
+   16. 书籍表单
+   ============================================================ */
+function openBookForm(bookId){
+  const b = bookId ? db.books.find(x=>x.id===bookId) : null;
+  const d = b || {title:'',originalTitle:'',author:'',region:'中国大陆',type:'原创',status:'todo',rating:0,review:'',tags:[]};
+  const tagHtml = db.tags.map(t=>`<button type="button" class="tag ${(d.tags||[]).includes(t.name)?'on':''}" data-act="formTag" data-name="${esc(t.name)}">${esc(t.name)}</button>`).join('');
+  openModal(`
+    <form id="bookForm" data-id="${b?b.id:''}">
+      <div class="modal-h">${b?'编辑书籍':'添加书籍'}</div>
+      <label class="field"><span>书名 <i>*</i></span><input name="title" value="${esc(d.title)}" placeholder="必填"></label>
+      <label class="field"><span>原名</span><input name="originalTitle" value="${esc(d.originalTitle||'')}" placeholder="选填"></label>
+      <label class="field"><span>作者</span><input name="author" value="${esc(d.author||'')}" placeholder="选填"></label>
+      <label class="field"><span>地区 <i>*</i></span>
+        <select name="region">${REGIONS.map(r=>`<option ${d.region===r?'selected':''}>${r}</option>`).join('')}</select>
+      </label>
+      <label class="field"><span>类型 <i>*</i></span>
+        <select name="type">${TYPES.map(r=>`<option ${d.type===r?'selected':''}>${r}</option>`).join('')}</select>
+      </label>
+      <div class="field"><span>状态 <i>*</i></span>
+        <div class="segs">
+          ${STATUSES.map(s=>`<button type="button" class="seg ${d.status===s.key?'on':''}" data-act="formStatus" data-status="${s.key}">${s.label}</button>`).join('')}
+        </div>
+        <input type="hidden" name="status" value="${d.status}">
+      </div>
+      <div class="field"><span>评分 <b id="ratingOut">${d.rating>0?d.rating.toFixed(1):'未评分'}</b></span>
+        <input type="range" name="rating" id="ratingRange" min="0" max="10" step="0.1" value="${d.rating||0}">
+      </div>
+      <label class="field"><span>简评</span><textarea name="review" rows="3" placeholder="选填">${esc(d.review||'')}</textarea></label>
+      <div class="field">
+        <span>标签 <button type="button" class="btn-mini" data-act="formNewTag">＋ 新建</button></span>
+        <div class="tagwrap" id="formTags">${tagHtml||'<span style="color:#b3b3b3;font-size:13px">还没有标签，点右侧新建</span>'}</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-act="closeModal">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  `);
+}
+
+/* ============================================================
+   17. 添加摘录表单
+   ============================================================ */
+function openQuoteForm(bookId){
+  if(!db.books.length){ alert('请先添加至少一本书'); return; }
+  const fixedBook = bookId ? db.books.find(x=>x.id===bookId) : null;
+
+  openModal(`
+    <form id="quoteForm" data-book="${bookId||''}">
+      <div class="modal-h">添加摘录</div>
+      ${fixedBook
+        ? `<div class="field"><span>书籍</span><div class="field-static">${esc(fixedBook.title)}</div></div>`
+        : `<div class="field">
+            <span>书籍 <i>*</i></span>
+            <input type="text" id="bookPickerInput" placeholder="输入书名搜索" autocomplete="off">
+            <input type="hidden" name="bookId" value="">
+            <div class="picker-results" id="bookPickerResults"></div>
+            <div class="picked" id="bookPicked"></div>
+          </div>`}
+      <label class="field"><span>摘录 <i>*</i></span><textarea name="text" rows="5" placeholder="摘录原文"></textarea></label>
+      <label class="field"><span>感想</span><textarea name="thought" rows="3" placeholder="选填"></textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-act="closeModal">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  `);
+}
+
+/* ============================================================
+   18. 编辑摘录表单
+   ============================================================ */
+function openQuoteEditForm(quoteId){
+  const q = db.quotes.find(x=>x.id===quoteId);
+  if(!q) return;
+  openModal(`
+    <form id="quoteEditForm" data-id="${q.id}">
+      <div class="modal-h">编辑摘录</div>
+      <label class="field"><span>摘录 <i>*</i></span><textarea name="text" rows="6">${esc(q.text)}</textarea></label>
+      <label class="field"><span>感想</span><textarea name="thought" rows="3">${esc(q.thought||'')}</textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-act="closeModal">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  `);
+}
+
+/* ============================================================
+   19. 书籍 -> 书单选择弹窗
+   ============================================================ */
+function openListPicker(bookId){
+  if(!db.books.some(b=>b.id===bookId)) return;
+  const rows = db.lists.length
+    ? db.lists.map(l=>{
+        const inIt = l.bookIds.includes(bookId);
+        return `<div class="row" data-act="toggleBookList" data-list="${l.id}" data-bid="${bookId}">
+          <div class="row-main">
+            <div class="row-title">${esc(l.name)}</div>
+            <div class="row-sub">${l.bookIds.length} 本</div>
+          </div>
+          <div class="row-right">${inIt?'<span class="pill st-done">已加入</span>':'<span class="pill st-todo">未加入</span>'}</div>
+        </div>`;
+      }).join('')
+    : '<div class="empty" style="padding:24px 0">还没有书单，点下方新建</div>';
+
+  openModal(`
+    <div class="modal-h">添加到书单</div>
+    <p class="hint">点击书单切换加入 / 移出</p>
+    ${rows}
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" data-act="newListForBook" data-bid="${bookId}">＋ 新建书单</button>
+      <button type="button" class="btn-primary" data-act="closeModal">完成</button>
+    </div>
+  `);
+}
+
+/* ============================================================
+   20. 书单内添加书籍（带搜索，局部刷新）
+   ============================================================ */
+function pickResultsHTML(listId){
+  const l = db.lists.find(x=>x.id===listId);
+  if(!l) return '';
+  const q = pickFilter.q.trim().toLowerCase();
+  let arr = db.books.filter(b=>!l.bookIds.includes(b.id));
+  if(q){
+    arr = arr.filter(b=>{
+      const hay = [b.title, b.originalTitle||'', b.author||'', ...(b.tags||[])].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  arr.sort((a,b)=>b.updatedAt-a.updatedAt);
+  if(!arr.length){
+    return q
+      ? '<div class="empty" style="padding:20px 0">没有匹配的书籍</div>'
+      : '<div class="empty" style="padding:20px 0">所有书都已在这个书单里</div>';
+  }
+  return arr.map(b=>`<div class="row">
+    <div class="row-main" data-act="addToList" data-list="${listId}" data-bid="${b.id}">
+      <div class="row-title">${esc(b.title)}</div>
+      <div class="row-sub">${esc(b.author||'佚名')} · ${esc(b.region)}</div>
+      ${(b.tags||[]).length?`<div class="row-tags">${(b.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}
+    </div>
+    <button class="btn-mini" data-act="addToList" data-list="${listId}" data-bid="${b.id}">添加</button>
+  </div>`).join('');
+}
+
+function openPickBooks(listId){
+  const l = db.lists.find(x=>x.id===listId);
+  if(!l) return;
+  pickFilter.q = '';
+  currentPickListId = listId;
+  openModal(`
+    <div class="modal-h">添加到「${esc(l.name)}」</div>
+    <div class="search">
+      <input id="pickSearch" type="search" placeholder="搜索书名 / 作者 / 标签" value="">
+    </div>
+    <div id="pickResults" data-list-id="${listId}">${pickResultsHTML(listId)}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" data-act="closeModal">完成</button>
+    </div>
+  `);
+}
+
+/* ============================================================
+   21. 事件委托
+   ============================================================ */
+document.addEventListener('click', async (e)=>{
+  if(e.target.id==='modalOverlay'){ closeModal(); return; }
+
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const act = el.dataset.act;
+  const id = el.dataset.id;
+
+  switch(act){
+    case 'switchTab': switchTab(el.dataset.tab); break;
+    case 'go':
+      if(el.dataset.to==='library'){ libFilter={q:'',status:'all',tag:null}; }
+      switchTab(el.dataset.to); break;
+    case 'back': back(); break;
+
+    case 'closeModal': closeModal(); break;
+    case 'showRequirements':
+      openModal(`
+        <div class="modal-h">需求清单</div>
+        ${REQ_DOC}
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" data-act="closeModal">关闭</button>
+        </div>
+      `);
+      break;
+
+    case 'logout': {
+      if(!confirm('退出登录？')) break;
+      await Store.signOut();
+      location.reload();
+      break;
+    }
+
+    case 'renameHomeTitle': {
+      const cur = (db.settings && db.settings.title) || '我的书斋';
+      const name = (prompt('书斋名称', cur) || '').trim();
+      if(!name || name===cur) break;
+      db.settings.title = name;
+      await Store.save();
+      render();
+      break;
+    }
+
+    case 'toggleQuote': {
+      const text = el.querySelector('.hquote-text');
+      const arrow = el.querySelector('.hquote-arrow');
+      if(!text) break;
+      const isOpen = text.classList.toggle('open');
+      if(arrow) arrow.classList.toggle('open', isOpen);
+      if(isOpen) expandedQuotes.add(id); else expandedQuotes.delete(id);
+      break;
+    }
+
+    case 'toggleCardQuote': {
+      const isOpen = el.classList.toggle('open');
+      if(isOpen) expandedQuoteCards.add(id); else expandedQuoteCards.delete(id);
+      break;
+    }
+
+    case 'newBook': openBookForm(); break;
+    case 'editBook': openBookForm(id); break;
+    case 'openBook': go('book',{id}); break;
+    case 'delBook': {
+      const b = db.books.find(x=>x.id===id);
+      if(!b) break;
+      if(!confirm(`删除《${b.title}》？\n该书下的摘录也会一起删除。`)) break;
+      db.books = db.books.filter(x=>x.id!==id);
+      db.quotes = db.quotes.filter(q=>q.bookId!==id);
+      db.lists.forEach(l=>{ l.bookIds = l.bookIds.filter(bid=>bid!==id); });
+      await Store.save();
+      back();
+      break;
+    }
+
+    case 'filterStatus':
+      libFilter = {q:'', status:el.dataset.status, tag:null};
+      switchTab('library');
+      break;
+    case 'setStatusFilter':
+      libFilter.status = el.dataset.status;
+      render();
+      break;
+    case 'clearTagFilter':
+      libFilter.tag = null;
+      render();
+      break;
+    case 'tagToLibrary':
+      libFilter = {q:'', status:'all', tag:el.dataset.name};
+      switchTab('library');
+      break;
+
+    case 'formStatus': {
+      const f = document.getElementById('bookForm');
+      if(!f) break;
+      f.elements['status'].value = el.dataset.status;
+      f.querySelectorAll('.segs .seg').forEach(s=>{
+        s.classList.toggle('on', s.dataset.status===el.dataset.status);
+      });
+      break;
+    }
+    case 'formTag': el.classList.toggle('on'); break;
+
+    case 'formNewTag': {
+      const name = (prompt('新标签名称')||'').trim();
+      if(!name) break;
+      const wrap = document.getElementById('formTags');
+      if(!wrap) break;
+      const existing = [...wrap.querySelectorAll('.tag')].find(x=>x.dataset.name===name);
+      if(existing){
+        existing.classList.add('on');
+        if(!db.tags.some(t=>t.name===name)){
+          db.tags.push({id:uid('t'), name, builtin:false});
+          await Store.save();
+        }
+        break;
+      }
+      if(!db.tags.some(t=>t.name===name)){
+        db.tags.push({id:uid('t'), name, builtin:false});
+        await Store.save();
+      }
+      const hint = wrap.querySelector('span');
+      if(hint) hint.remove();
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tag on';
+      btn.dataset.act = 'formTag';
+      btn.dataset.name = name;
+      btn.textContent = name;
+      wrap.appendChild(btn);
+      break;
+    }
+
+    case 'addToLists': openListPicker(id); break;
+    case 'toggleBookList': {
+      const l = db.lists.find(x=>x.id===el.dataset.list);
+      const bid = el.dataset.bid;
+      if(!l) break;
+      if(l.bookIds.includes(bid)) l.bookIds = l.bookIds.filter(x=>x!==bid);
+      else l.bookIds.push(bid);
+      await Store.save();
+      render();
+      openListPicker(bid);
+      break;
+    }
+    case 'newListForBook': {
+      const bid = el.dataset.bid;
+      const name = (prompt('新书单名称')||'').trim();
+      if(!name) break;
+      const l = {id:uid('l'), name, bookIds:[bid]};
+      db.lists.push(l);
+      await Store.save();
+      render();
+      openListPicker(bid);
+      break;
+    }
+
+    case 'newTag': {
+      const name = (prompt('新标签名称')||'').trim();
+      if(!name) break;
+      if(db.tags.some(t=>t.name===name)){ alert('标签已存在'); break; }
+      db.tags.push({id:uid('t'), name, builtin:false});
+      await Store.save(); render();
+      break;
+    }
+    case 'renameTag': {
+      const t = db.tags.find(x=>x.id===id);
+      if(!t) break;
+      const name = (prompt('新的标签名称', t.name)||'').trim();
+      if(!name || name===t.name) break;
+      if(db.tags.some(x=>x.name===name)){ alert('标签已存在'); break; }
+      const old = t.name;
+      t.name = name;
+      db.books.forEach(b=>{
+        if(b.tags) b.tags = b.tags.map(n=>n===old?name:n);
+      });
+      await Store.save(); render();
+      break;
+    }
+    case 'delTag': {
+      const t = db.tags.find(x=>x.id===id);
+      if(!t) break;
+      const n = db.books.filter(b=>(b.tags||[]).includes(t.name)).length;
+      if(!confirm(`删除标签「${t.name}」？\n${n} 本书上的这个标签也会被移除。`)) break;
+      db.tags = db.tags.filter(x=>x.id!==id);
+      db.books.forEach(b=>{ if(b.tags) b.tags = b.tags.filter(n2=>n2!==t.name); });
+      if(libFilter.tag===t.name) libFilter.tag = null;
+      await Store.save(); render();
+      break;
+    }
+
+    case 'newQuote': openQuoteForm(); break;
+    case 'newQuoteFor': openQuoteForm(id); break;
+    case 'editQuote': openQuoteEditForm(id); break;
+    case 'pickQuoteBook': {
+      const b = db.books.find(x=>x.id===id);
+      if(!b) break;
+      const f = document.getElementById('quoteForm');
+      if(!f) break;
+      const inp = document.getElementById('bookPickerInput');
+      const hid = f.elements['bookId'];
+      const box = document.getElementById('bookPickerResults');
+      const picked = document.getElementById('bookPicked');
+      if(inp) inp.value = b.title;
+      if(hid) hid.value = b.id;
+      if(box) box.innerHTML = '';
+      if(picked) picked.innerHTML = `已选择：<b>${esc(b.title)}</b>`;
+      break;
+    }
+    case 'delQuote': {
+      if(!confirm('删除这条摘录？')) break;
+      db.quotes = db.quotes.filter(q=>q.id!==id);
+      expandedQuotes.delete(id);
+      expandedQuoteCards.delete(id);
+      await Store.save(); render();
+      break;
+    }
+
+    case 'newList': {
+      const name = (prompt('书单名称')||'').trim();
+      if(!name) break;
+      db.lists.push({id:uid('l'), name, bookIds:[]});
+      await Store.save(); render();
+      break;
+    }
+    case 'openList': go('list',{id}); break;
+    case 'renameList': {
+      const l = db.lists.find(x=>x.id===id);
+      if(!l) break;
+      const name = (prompt('新的书单名称', l.name)||'').trim();
+      if(!name) break;
+      l.name = name;
+      await Store.save(); render();
+      break;
+    }
+    case 'delList': {
+      const l = db.lists.find(x=>x.id===id);
+      if(!l) break;
+      if(!confirm(`删除书单「${l.name}」？\n书籍本身不会被删除。`)) break;
+      db.lists = db.lists.filter(x=>x.id!==id);
+      await Store.save(); back();
+      break;
+    }
+    case 'pickBooks': openPickBooks(id); break;
+    case 'addToList': {
+      const listId = el.dataset.list;
+      const bid = el.dataset.bid;
+      const l = db.lists.find(x=>x.id===listId);
+      if(l && !l.bookIds.includes(bid)) l.bookIds.push(bid);
+      await Store.save();
+      render();
+      const box = document.getElementById('pickResults');
+      if(box) box.innerHTML = pickResultsHTML(listId);
+      break;
+    }
+    case 'removeFromList': {
+      const l = db.lists.find(x=>x.id===el.dataset.list);
+      if(!l) break;
+      l.bookIds = l.bookIds.filter(b=>b!==el.dataset.bid);
+      await Store.save(); render();
+      break;
+    }
+    case 'moveBookUp': {
+      const l = db.lists.find(x=>x.id===el.dataset.list);
+      if(!l) break;
+      const i = l.bookIds.indexOf(el.dataset.bid);
+      if(i>0){ [l.bookIds[i-1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i-1]]; await Store.save(); render(); }
+      break;
+    }
+    case 'moveBookDown': {
+      const l = db.lists.find(x=>x.id===el.dataset.list);
+      if(!l) break;
+      const i = l.bookIds.indexOf(el.dataset.bid);
+      if(i>-1 && i<l.bookIds.length-1){ [l.bookIds[i+1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i+1]]; await Store.save(); render(); }
+      break;
+    }
+
+    case 'exportData': {
+      const data = JSON.stringify(db, null, 2);
+      openModal(`
+        <div class="modal-h">导出备份</div>
+        <p class="hint">复制下方内容保存，或点下载保存为文件。</p>
+        <textarea class="export-area" readonly id="exportArea">${esc(data)}</textarea>
+        <div class="modal-actions">
+          <button class="btn-ghost" data-act="closeModal">关闭</button>
+          <button class="btn-primary" data-act="copyExport">复制</button>
+          <button class="btn-primary" data-act="downloadExport">下载</button>
+        </div>
+      `);
+      break;
+    }
+    case 'copyExport': {
+      const ta = document.getElementById('exportArea');
+      ta.select();
+      try{ await navigator.clipboard.writeText(ta.value); alert('已复制到剪贴板'); }
+      catch(err){ document.execCommand('copy'); alert('已复制'); }
+      break;
+    }
+    case 'downloadExport': {
+      const blob = new Blob([JSON.stringify(db,null,2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `书斋备份_${fmtDate(Date.now())}.json`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      break;
+    }
+    case 'importData': {
+      document.getElementById('importFile').click();
+      break;
+    }
+    case 'clearAll': {
+      if(!confirm('确定清空所有数据？\n此操作不可撤销，建议先导出备份。')) break;
+      if(!confirm('再次确认：所有书籍、摘录、书单都会被删除。')) break;
+      db = seedDB();
+      await Store.save();
+      render();
+      break;
+    }
+  }
+});
+
+/* --- 输入事件 --- */
+document.addEventListener('input', (e)=>{
+  if(e.target.id==='libSearch'){
+    libFilter.q = e.target.value;
+    const wrap = document.getElementById('bookList');
+    if(wrap) wrap.innerHTML = bookListHTML();
+  }
+  if(e.target.id==='tagSearch'){
+    tagFilter.q = e.target.value;
+    const wrap = document.getElementById('tagList');
+    if(wrap) wrap.innerHTML = tagListHTML();
+  }
+  if(e.target.id==='quoteSearch'){
+    quoteFilter.q = e.target.value;
+    const wrap = document.getElementById('quoteList');
+    if(wrap) wrap.innerHTML = quoteListHTML();
+  }
+  if(e.target.id==='ratingRange'){
+    const v = parseFloat(e.target.value)||0;
+    const out = document.getElementById('ratingOut');
+    if(out) out.textContent = v>0 ? v.toFixed(1) : '未评分';
+  }
+  if(e.target.id==='pickSearch'){
+    pickFilter.q = e.target.value;
+    const box = document.getElementById('pickResults');
+    const listId = currentPickListId || (box && box.dataset.listId);
+    if(box && listId){
+      box.innerHTML = pickResultsHTML(listId);
+    }
+  }
+  if(e.target.id==='bookPickerInput'){
+    const kw = e.target.value.trim().toLowerCase();
+    const box = document.getElementById('bookPickerResults');
+    if(!box) return;
+    if(!kw){ box.innerHTML = ''; return; }
+    const arr = db.books.filter(b=>b.title.toLowerCase().includes(kw)).slice(0,8);
+    box.innerHTML = arr.length
+      ? arr.map(b=>`<button type="button" class="picker-item" data-act="pickQuoteBook" data-id="${b.id}">
+          <span>${esc(b.title)}</span>
+          <span class="picker-sub">${esc(b.author||'佚名')} · ${esc(b.region)}</span>
+        </button>`).join('')
+      : '<div class="picker-empty">没有匹配的书籍</div>';
+  }
+});
+
+/* --- 表单提交 --- */
+document.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const f = e.target;
+
+  if(f.id==='bookForm'){
+    const g = n => f.elements[n] ? f.elements[n].value : '';
+    const data = {
+      title: g('title').trim(),
+      originalTitle: g('originalTitle').trim(),
+      author: g('author').trim(),
+      region: g('region'),
+      type: g('type'),
+      status: g('status') || 'todo',
+      rating: parseFloat(g('rating'))||0,
+      review: g('review').trim(),
+      tags: [...f.querySelectorAll('#formTags .tag.on')].map(el=>el.dataset.name),
+    };
+    if(!data.title){ alert('请填写书名'); return; }
+
+    const id = f.dataset.id;
+    if(id){
+      const b = db.books.find(x=>x.id===id);
+      if(b){
+        const statusChanged = b.status !== data.status;
+        Object.assign(b, data, {updatedAt:Date.now()});
+        if(statusChanged) b.statusUpdatedAt = Date.now();
+      }
+    } else {
+      const now = Date.now();
+      db.books.push(Object.assign({id:uid('b'), createdAt:now, updatedAt:now, statusUpdatedAt:now}, data));
+    }
+    await Store.save();
+    closeModal();
+    render();
+    return;
+  }
+
+  if(f.id==='quoteForm'){
+    const fixedBook = f.dataset.book;
+    const bookId = fixedBook || (f.elements['bookId'] ? f.elements['bookId'].value : '');
+    const text = f.elements['text'].value.trim();
+    const thought = f.elements['thought'].value.trim();
+    if(!text){ alert('请填写摘录内容'); return; }
+    if(!bookId){ alert('请先搜索并选择书籍'); return; }
+    db.quotes.push({id:uid('q'), bookId, text, thought, createdAt:Date.now()});
+    await Store.save();
+    closeModal();
+    render();
+    return;
+  }
+
+  if(f.id==='quoteEditForm'){
+    const q = db.quotes.find(x=>x.id===f.dataset.id);
+    if(!q) return;
+    const text = f.elements['text'].value.trim();
+    const thought = f.elements['thought'].value.trim();
+    if(!text){ alert('摘录内容不能为空'); return; }
+    q.text = text;
+    q.thought = thought;
+    await Store.save();
+    closeModal();
+    render();
+    return;
+  }
+});
+
+/* --- 文件导入 --- */
+document.addEventListener('change', (e)=>{
+  if(e.target.id!=='importFile') return;
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    try{
+      const obj = JSON.parse(reader.result);
+      if(!obj || !Array.isArray(obj.books)) throw new Error('bad');
+      if(!confirm('导入会覆盖当前所有数据，确定继续？')) return;
+      db = Object.assign(seedDB(), obj);
+      if(!db.settings || typeof db.settings!=='object') db.settings = { title:'我的书斋' };
+      if(!db.settings.title) db.settings.title = '我的书斋';
+      db.books.forEach(b=>{
+        if(!b.statusUpdatedAt) b.statusUpdatedAt = b.updatedAt || b.createdAt || Date.now();
+      });
+      await Store.save();
+      render();
+      alert('导入成功');
+    }catch(err){
+      alert('导入失败：文件格式不正确');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+/* ============================================================
+   22. 启动（含登录页）
+   ============================================================ */
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+
+  if (!session) {
+    document.getElementById('app').innerHTML = `
+      <div class="auth-wrap">
+        <div class="auth-title">登录书斋</div>
+        <input id="authEmail" class="auth-input" type="email" placeholder="邮箱" autocomplete="username">
+        <input id="authPass" class="auth-input" type="password" placeholder="密码" autocomplete="current-password">
+        <button id="authBtn" class="auth-btn">登录</button>
+        <div id="authMsg" class="auth-msg"></div>
+        <div class="auth-foot">账号由管理员在后台创建<br>忘记密码请联系管理员重置</div>
+      </div>`;
+
+    document.getElementById('authBtn').onclick = async () => {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPass').value;
+      const msg = document.getElementById('authMsg');
+      msg.textContent = '';
+      if(!email || !password){ msg.textContent = '请填写邮箱和密码'; return; }
+
+      const btn = document.getElementById('authBtn');
+      btn.disabled = true;
+      btn.textContent = '登录中…';
+
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        msg.textContent = '登录失败：' + error.message;
+        btn.disabled = false;
+        btn.textContent = '登录';
+        return;
+      }
+      await Store.load();
+      render();
+      renderTabbar();
+    };
+    return;
+  }
+
+  await Store.load();
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
