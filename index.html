@@ -279,11 +279,9 @@ h1,h2,h3{margin:0;font-weight:600}
 .auth-title{font-size:22px;font-weight:600;margin-bottom:24px;line-height:1.35}
 .auth-input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:15px;background:var(--soft);outline:none}
 .auth-input:focus{background:#fff;border-color:#ddd}
-.auth-btn{width:100%;padding:14px;background:var(--篇fg);color:#fff;border-radius:10px;font-size',':15px;font-weight:500}
-.auth-btn:disabled{长篇opacity:.6}
-.auth-msg{color'];
-
-:var(--danger);font-size:13constpx;margin-top:12px;min-height T:18px}
+.auth-btn{width:100%;padding:14px;background:var(--fg);color:#fff;border-radius:10px;font-size:15px;font-weight:500}
+.auth-btn:disabled{opacity:.6}
+.auth-msg{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
 .auth-foot{font-size:12px;color:var(--sub2);margin-top:24px;text-align:center;line-height:1.7}
 </style>
 </head>
@@ -309,7 +307,9 @@ const STATUSES = [
   {key:'reread',  label:'已重读'},
 ];
 const STATUS_MAP = Object.fromEntries(STATUSES.map(s=>[s.key,s.label]));
-const DEFAULT_TAGS = ['甜文','虐文','ABO','无限流','校园','都市','古代','重生','系统','娱乐圈','破镜重圆','追妻火葬场','短ABS = [
+const DEFAULT_TAGS = ['甜文','虐文','ABO','无限流','校园','都市','古代','重生','系统','娱乐圈','破镜重圆','追妻火葬场','短篇','长篇'];
+
+const TABS = [
   {name:'home',label:'首页'},
   {name:'library',label:'书库'},
   {name:'quotes',label:'摘录'},
