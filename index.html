@@ -344,8 +344,8 @@ function statusPill(st){return `<span class="pill st-${st}">${STATUS_MAP[st]||st
 let db = null;
 
 /* ⚠️ 在这里填入你自己的 Supabase 项目信息 */
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://bdtadwgfecqebhkgkmaj.supabase.co/';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkdGFkd2dmZWNxZWJoa2drbWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDA0NTEsImV4cCI6MjEwODU3NjQ1MX0.huXw_x8SAdN8q2gdJjW_XXo5Fik9Zy8R0E6ckc-qvro';
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
