@@ -905,7 +905,7 @@ function viewBook(id){
       <div class="d-block">
         <div class="k-head">
           <span>所属书单</span>
-          <button class="btn-mini" data-act="addToLists" data-id="${id}">＋ 添加书单</button>
+          <button class="btn-mini" data-act="addToLists" data-id="${id}">＋</button>
         </div>
         <div class="tagwrap">${inLists.length
           ? inLists.map(l=>`<button class="tag" data-act="openList" data-id="${l.id}">${esc(l.name)}</button>`).join('')
@@ -920,7 +920,7 @@ function viewBook(id){
       <div class="d-block">
         <div class="k-head">
           <span>摘录（${quotes.length}）</span>
-          <button class="btn-mini" data-act="newQuoteFor" data-id="${id}">添加摘录</button>
+          <button class="btn-mini" data-act="newQuoteFor" data-id="${id}">+</button>
         </div>
         ${quotes.length
           ? quotes.map(q=>`<div class="quote">
