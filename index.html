@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!--
   ============================================================
-  书斋 · 需求清单（v0.12.3）
+  书斋 · 需求清单（v0.12.4）
   ============================================================
   【目录索引】用 Ctrl+F 搜对应的关键字可快速定位
   ------------------------------------------------------------
@@ -44,11 +44,12 @@
   [21] 事件委托             搜 "21. 事件委托"
   [22] 启动                 搜 "22. 启动"
   ------------------------------------------------------------
-  【本版变更 v0.12.3】
-  - 评分区展示态改为：评分行（评分 + 分数 + 图标）+ 两列两行网格
-  - 移除常驻滑块，点击右上角调节图标弹出底部编辑面板
-  - 0 分显示「未评分」/「未评」
-  - 拖动滑块实时联动展示区
+  【本版变更 v0.12.4】
+  - 评分区去掉灰色圆角背景框与分割线，改为纯文字排版
+  - 总分字号从 26px 缩到 20px，/10.0 缩到 12px
+  - 子评分两列两行，靠留白分隔
+  - 标签选择弹窗：新建按钮「+」移到标签列表末尾，与普通标签同款圆角框
+  - 移除底部单独的新建按钮
   ============================================================
 -->
 <style>
@@ -181,24 +182,24 @@ h1,h2,h3{margin:0;font-weight:600}
 .d-actions{display:flex;gap:10px;margin-top:22px}
 .d-actions button{flex:1}
 
-/* ============ 评分区块（v0.12.3 展示态） ============ */
+/* ============ 评分区块（v0.12.4 展示态：无背景无分割线） ============ */
 .rate-block{padding:14px 0;border-top:1px solid var(--line)}
 
-.rate-total{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.rate-total{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .total-label{font-size:13px;color:var(--sub);flex-shrink:0}
-.total-value{font-size:26px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
-.total-value.empty{font-size:16px;font-weight:400;color:var(--sub2);letter-spacing:0}
-.total-max{font-size:14px;color:var(--sub);margin-left:2px;font-weight:400}
+.total-value{font-size:20px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.1px}
+.total-value.empty{font-size:15px;font-weight:400;color:var(--sub2);letter-spacing:0}
+.total-max{font-size:12px;color:var(--sub);margin-left:2px;font-weight:400}
 
 .rate-total .icon-btn{margin-left:auto}
 
-.rate-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.rate-cell{background:var(--soft);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.rate-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:24px;row-gap:12px}
+.rate-cell{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
 .cell-label{font-size:12px;color:var(--sub);flex-shrink:0}
 .cell-value{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg)}
 .cell-value.empty{color:var(--sub2);font-weight:400;font-size:13px}
 
-/* 编辑面板行（复用现有 .rate-row 结构） */
+/* 编辑面板行 */
 .rate-row{display:flex;align-items:center;gap:10px;padding:8px 0}
 .rate-label{width:70px;flex-shrink:0;font-size:13px;color:#555}
 .rate-label.bold{font-weight:600;color:var(--fg)}
@@ -210,7 +211,7 @@ h1,h2,h3{margin:0;font-weight:600}
 
 .sheet-divider{height:1px;background:var(--line);margin:6px 0 4px}
 
-/* ============ 其它现有样式 ============ */
+/* ============ 其它样式 ============ */
 .quote{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
 .quote-text{font-size:14px;line-height:1.75;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .quote-text.open{-webkit-line-clamp:unset;overflow:visible}
@@ -272,7 +273,9 @@ h1,h2,h3{margin:0;font-weight:600}
 .tag-picker-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
 .tag-picker-wrap .tag{padding:6px 12px;font-size:13px}
 .tag-picker-wrap .tag:active{opacity:.6}
-.modal-actions .btn-plus{flex:0 0 auto;padding:10px 18px;font-size:16px;line-height:1;min-width:48px}
+/* v0.12.4：新增标签按钮，与普通标签同款圆角框 */
+.tag-picker-wrap .tag-add{min-width:32px;justify-content:center;font-weight:500;color:#888;background:#fff;border:1px dashed #ccc}
+.tag-picker-wrap .tag-add:active{background:var(--soft);color:#555}
 
 .setting-row{display:flex;align-items:center;width:100%;padding:15px 0;border-bottom:1px solid var(--line);font-size:15px;text-align:left;background:none}
 .setting-row.danger{color:var(--danger)}
@@ -1018,7 +1021,7 @@ function viewBook(id){
   const visibleQuotes = showAll ? quotes : quotes.slice(0, 3);
   const hidden = quotes.length - 3;
 
-  /* v0.12.3 评分展示态 */
+  /* v0.12.4 评分展示态：总分 20px，无背景无分割线 */
   const ratingVal = Number(b.rating) || 0;
   const ratingDisp = ratingVal > 0
     ? `${ratingVal.toFixed(1)}<span class="total-max">/10.0</span>`
@@ -1114,7 +1117,7 @@ function viewBook(id){
 }
 
 /* ============================================================
-   9.5 评分展示刷新（编辑面板拖动时局部更新展示区）
+   9.5 评分展示刷新
    ============================================================ */
 function refreshRateDisplay(bookId){
   const b = db.books.find(x=>x.id===bookId);
@@ -1299,7 +1302,7 @@ function viewSettings(){
       <div class="sec-h"><span>关于</span></div>
       <button class="setting-row" data-act="showRequirements">需求清单</button>
       <div class="setting-row plain">数据已启用云端同步（Supabase）</div>
-      <div class="setting-row plain">版本 0.12.3</div>
+      <div class="setting-row plain">版本 0.12.4</div>
     </div>
   </div>`;
 }
@@ -1391,13 +1394,14 @@ const REQ_DOC = `
   <h3>2. 书籍详情</h3>
   <ul>
     <li>顶部状态按钮组，点击直接切换状态</li>
-    <li>评分区展示态：评分行（评分 + 分数 + 调节图标）+ 两列两行网格</li>
-    <li>点击调节图标弹出底部编辑面板，总评分 + 四个子评分滑块</li>
+    <li>评分区展示态：评分行（评分 + 20px 分数 + 调节图标）+ 两列两行子评分</li>
+    <li>展示态无灰色背景、无分割线，靠 24px 列距与 12px 行距留白分隔</li>
+    <li>点击调节图标弹出底部面板，总评分 + 四个子评分滑块</li>
     <li>拖动滑块实时联动展示区；600ms 后独立保存，失败回滚</li>
     <li>0 分显示「未评分」/「未评」；调评分不更新 updatedAt</li>
     <li>简评：右上角铅笔图标触发编辑弹窗，输入框 11 行</li>
     <li>标签、所属书单、摘录三处添加按钮统一为「＋」小图标</li>
-    <li>标签弹窗：圆角框并排显示，点击切换高亮；底部「＋」新建</li>
+    <li>标签弹窗：圆角框并排显示，点击切换高亮；末尾「+」标签框用于新建</li>
     <li>摘录初始 3 条，「展开更多 / 收起」</li>
   </ul>
   <h3>3. 标签</h3>
@@ -1526,7 +1530,7 @@ function openReviewEditModal(bookId){
 }
 
 /* ============================================================
-   16.6 评分编辑面板（v0.12.3 新增）
+   16.6 评分编辑面板
    ============================================================ */
 function openRateEditor(bookId){
   const b = db.books.find(x=>x.id===bookId);
@@ -1667,26 +1671,31 @@ function openListPicker(bookId){
 }
 
 /* ============================================================
-   18.5 书籍 -> 标签选择弹窗
+   18.5 书籍 -> 标签选择弹窗（v0.12.4：新建「+」并入标签列表末尾）
    ============================================================ */
 function openBookTagPicker(bookId){
   const b = db.books.find(x=>x.id===bookId);
   if(!b) return;
   const cur = new Set(b.tags || []);
 
-  const tagsHtml = db.tags.length
-    ? db.tags.map(t=>{
-        const inIt = cur.has(t.name);
-        return `<button type="button" class="tag ${inIt?'on':''}" data-act="toggleBookTag" data-bid="${bookId}" data-name="${esc(t.name)}">${esc(t.name)}</button>`;
-      }).join('')
-    : '<div class="empty" style="padding:20px 0;width:100%">还没有标签，点下方 ＋ 新建</div>';
+  const tagsHtml = db.tags.map(t=>{
+    const inIt = cur.has(t.name);
+    return `<button type="button" class="tag ${inIt?'on':''}" data-act="toggleBookTag" data-bid="${bookId}" data-name="${esc(t.name)}">${esc(t.name)}</button>`;
+  }).join('');
+
+  /* 「+」作为最后一个标签框，点它新建 */
+  const addBtn = `<button type="button" class="tag tag-add" data-act="newTagForBook" data-bid="${bookId}" aria-label="新建标签">+</button>`;
+
+  const emptyHint = db.tags.length
+    ? ''
+    : '<p class="hint" style="margin-bottom:10px">还没有标签，点下方 + 新建第一个标签</p>';
 
   openModal(`
     <div class="modal-h">选择标签</div>
-    <p class="hint">点击切换添加 / 移除</p>
-    <div class="tag-picker-wrap" id="tagPickerWrap">${tagsHtml}</div>
+    <p class="hint">点击标签切换添加 / 移除，点 + 新建</p>
+    ${emptyHint}
+    <div class="tag-picker-wrap" id="tagPickerWrap">${tagsHtml}${addBtn}</div>
     <div class="modal-actions">
-      <button type="button" class="btn-ghost btn-plus" data-act="newTagForBook" data-bid="${bookId}" aria-label="新建标签">＋</button>
       <button type="button" class="btn-primary" data-act="closeModal">完成</button>
     </div>
   `);
@@ -1940,7 +1949,7 @@ document.addEventListener('click', async (e)=>{
       try{
         await Store.save();
         needRefreshBookDetail = true;
-        openBookTagPicker(bid);
+        openBookTagPicker(bid); /* 重开弹窗显示新标签 */
       }catch(e){}
       break;
     }
@@ -2285,7 +2294,6 @@ document.addEventListener('input', (e)=>{
     if(out) out.textContent = v.toFixed(1);
     return;
   }
-  /* v0.12.3 评分编辑面板里的滑块 */
   if(e.target.classList && e.target.classList.contains('rate-input')){
     const bid = e.target.dataset.bid;
     const field = e.target.dataset.field;
@@ -2297,7 +2305,6 @@ document.addEventListener('input', (e)=>{
 
     b[field] = val;
 
-    /* 更新面板内该行的数值 */
     const out = document.getElementById(`rate_edit_${bid}_${field}`);
     if(out){
       if(isTotal) out.textContent = val > 0 ? val.toFixed(1) : '未评分';
@@ -2305,10 +2312,7 @@ document.addEventListener('input', (e)=>{
       out.classList.toggle('empty', val <= 0);
     }
 
-    /* 更新详情页展示区（如果用户在详情页） */
     refreshRateDisplay(bid);
-
-    /* 调度保存 */
     scheduleSaveRates(bid);
     return;
   }
