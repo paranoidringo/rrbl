@@ -12,30 +12,43 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!--
   ============================================================
-  书斋 · 需求清单（v0.11.0）
+  书斋 · 需求清单（v0.12.3）
+  ============================================================
+  【目录索引】用 Ctrl+F 搜对应的关键字可快速定位
   ------------------------------------------------------------
-  1. 书库：添加 / 删除 / 查询书籍；状态 5 种（底色区分）
-     - 添加/编辑表单可选填「角色姓名」
-     - 搜索支持书名 / 原名 / 作者 / 标签 / 地区 / 类型，200ms 防抖
-     - 支持按评分排序（同分按书名），可取消；箭头用 SVG
-  2. 书籍详情：基本信息、所属书单、打分、简评、角色姓名、摘录
-     - 顶部状态按钮组，点击直接切换状态（即时保存，失败回滚）
-  3. 标签：预置 + 新建/重命名/删除，点击进书库筛选，标签页支持搜索（防抖）
-     - 书籍表单的标签区右侧「＋」按钮，不显示文字
-  4. 摘录：独立摘录库，按时间倒序，支持关键词搜索（防抖）
-     - 添加摘录时书籍改为搜索选择，点击搜索框显示最近摘录过的书（最多 5 条）
-     - 摘录内容与感想可即时编辑；摘录库内单条限 5 行可展开
-  5. 书单：自定义、手动排序；书单内添加书籍支持搜索（防抖）并即时刷新
-  6. 首页：快捷入口、快捷添加书籍、状态统计、正在读、最新动态、最近摘录
-     - 默认标题「Read and Record BL」，点击改名，写入用户元数据
-  7. 设置：JSON 导出/导入、本地备份与恢复、清空数据、退出登录、需求清单
-     - 新增「阅读统计」页面：今年读完、平均分、藏书总数、状态分布、按月阅读趋势
-  8. 账户与云端：Supabase 邮箱登录 + 行级安全隔离
-  9. 数据安全与性能：
-     - 保存为增量同步（对比快照，仅同步变化的行）
-     - 保存失败 Toast 提示 + 按钮恢复
-     - 每次保存后自动本地快照（保留 3 份）
-     - 导入/清空/恢复备份后自动全量同步一次
+  [1] 常量与配置            搜 "1. 常量"
+  [2] 工具函数              搜 "2. 工具"
+  [3] 数据层 Store          搜 "3. 数据层"
+  [4] 路由与视图状态        搜 "4. 路由"
+  [5] 渲染入口              搜 "5. 渲染入口"
+  [6] 通用片段              搜 "6. 通用片段"
+  [7] 视图：首页            搜 "7. 视图：首页"
+  [8] 视图：书库            搜 "8. 视图：书库"
+  [9] 视图：书籍详情        搜 "9. 视图：书籍详情"
+  [9.5] 评分展示刷新        搜 "9.5 评分展示刷新"
+  [10] 视图：标签管理       搜 "10. 视图：标签管理"
+  [11] 视图：摘录库         搜 "11. 视图：摘录库"
+  [12] 视图：书单           搜 "12. 视图：书单"
+  [13] 视图：设置           搜 "13. 视图：设置"
+  [13.5] 视图：阅读统计     搜 "13.5 视图：阅读统计"
+  [14] 需求清单文本         搜 "14. 需求清单"
+  [15] 弹窗基础             搜 "15. 弹窗基础"
+  [16] 书籍表单             搜 "16. 书籍表单"
+  [16.5] 简评弹窗           搜 "16.5 简评弹窗"
+  [16.6] 评分编辑面板       搜 "16.6 评分编辑面板"
+  [17] 添加摘录表单         搜 "17. 添加摘录表单"
+  [18] 书单选择弹窗         搜 "18. 书籍 -> 书单"
+  [18.5] 标签选择弹窗       搜 "18.5 书籍 -> 标签"
+  [19] 书单内添加书籍       搜 "19. 书单内添加书籍"
+  [20] 本地备份             搜 "20. 本地备份"
+  [21] 事件委托             搜 "21. 事件委托"
+  [22] 启动                 搜 "22. 启动"
+  ------------------------------------------------------------
+  【本版变更 v0.12.3】
+  - 评分区展示态改为：评分行（评分 + 分数 + 图标）+ 两列两行网格
+  - 移除常驻滑块，点击右上角调节图标弹出底部编辑面板
+  - 0 分显示「未评分」/「未评」
+  - 拖动滑块实时联动展示区
   ============================================================
 -->
 <style>
@@ -50,17 +63,12 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
-body{
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Helvetica Neue",Arial,sans-serif;
-  background:#fff;color:var(--fg);font-size:15px;line-height:1.55;
-  padding-bottom:calc(64px + env(safe-area-inset-bottom));
-}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Helvetica Neue",Arial,sans-serif;background:#fff;color:var(--fg);font-size:15px;line-height:1.55;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
 button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:15px;color:var(--fg)}
 h1,h2,h3{margin:0;font-weight:600}
 .page{padding:0 16px 24px;max-width:640px;margin:0 auto}
 
-/* 顶栏 */
 .topbar{display:flex;align-items:center;gap:8px;height:56px;position:sticky;top:0;background:#fff;z-index:10}
 .topbar h1{font-size:20px;letter-spacing:.3px;flex:1}
 .topbar-title{font-size:16px;font-weight:600;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -75,7 +83,10 @@ h1,h2,h3{margin:0;font-weight:600}
 .btn-primary{background:var(--fg);color:#fff;border-radius:12px;padding:10px 20px;font-size:14px;font-weight:500}
 .btn-primary:disabled{opacity:.6}
 
-/* 首页 */
+.icon-btn{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:#666;background:var(--soft);border:0;padding:0;cursor:pointer}
+.icon-btn:active{background:#ececec}
+.icon-btn svg{width:15px;height:15px;display:block}
+
 .hero{padding:18px 0 16px}
 .hero-date{font-size:12px;color:var(--sub);letter-spacing:.3px;margin-bottom:6px;font-variant-numeric:tabular-nums}
 .hero-hi{font-size:24px;font-weight:600;letter-spacing:.3px;display:inline-flex;align-items:center;gap:7px;text-align:left;max-width:100%}
@@ -88,12 +99,7 @@ h1,h2,h3{margin:0;font-weight:600}
 .qcard-l{font-size:14px;font-weight:500}
 .qcard-s{font-size:11px;color:var(--sub);margin-top:2px}
 
-/* 快捷添加书籍 */
-.addbook{
-  display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
-  margin-top:10px;padding:12px;border:1px dashed #d9d9d9;border-radius:14px;
-  font-size:14px;color:#555;background:#fff;letter-spacing:.2px;
-}
+.addbook{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:10px;padding:12px;border:1px dashed #d9d9d9;border-radius:14px;font-size:14px;color:#555;background:#fff;letter-spacing:.2px}
 .addbook:active{background:var(--soft);border-color:#c6c6c6}
 .addbook .plus{font-size:16px;line-height:1;color:var(--sub);font-weight:400}
 
@@ -106,7 +112,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .stat-n{font-size:18px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
 .stat-l{font-size:11px;color:var(--sub);margin-top:2px}
 
-/* 列表行 */
 .row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
 .row:last-child{border-bottom:0}
 .row-main{flex:1;min-width:0}
@@ -117,14 +122,12 @@ h1,h2,h3{margin:0;font-weight:600}
 .row-rate{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
 .row-ops{display:flex;gap:6px;flex-shrink:0}
 
-/* 紧凑行（最新动态） */
 .minirow{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px;width:100%;text-align:left;background:none}
 .minirow:last-child{border-bottom:0}
 .minirow:active{opacity:.6}
 .minirow-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;font-size:14px}
 .minirow-d{font-size:12px;color:var(--sub2);flex-shrink:0;font-variant-numeric:tabular-nums;margin-left:2px}
 
-/* 首页摘录 */
 .hquote{padding:13px 0;border-bottom:1px solid var(--line);cursor:pointer}
 .hquote:last-child{border-bottom:0}
 .hquote-head{display:flex;align-items:center;gap:6px;margin-bottom:5px}
@@ -134,7 +137,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .hquote-text{font-size:13.5px;line-height:1.72;color:#444;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .hquote-text.open{-webkit-line-clamp:unset;overflow:visible}
 
-/* 状态 */
 .pill{display:inline-flex;align-items:center;font-size:12px;padding:3px 9px;border-radius:999px;font-weight:500;white-space:nowrap}
 .st-todo{background:var(--st-todo-bg);color:var(--st-todo-fg)}
 .st-reading{background:var(--st-reading-bg);color:var(--st-reading-fg)}
@@ -142,7 +144,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .st-dropped{background:var(--st-dropped-bg);color:var(--st-dropped-fg)}
 .st-reread{background:var(--st-reread-bg);color:var(--st-reread-fg)}
 
-/* 详情页状态切换条 */
 .status-bar{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 14px}
 .status-btn{display:inline-flex;align-items:center;font-size:12px;padding:4px 10px;border-radius:999px;font-weight:500;white-space:nowrap;border:1px solid transparent;transition:background .12s,color .12s}
 .status-btn:active{opacity:.7}
@@ -153,11 +154,9 @@ h1,h2,h3{margin:0;font-weight:600}
 .status-btn.on.st-dropped{background:var(--st-dropped-bg);color:var(--st-dropped-fg)}
 .status-btn.on.st-reread{background:var(--st-reread-bg);color:var(--st-reread-fg)}
 
-/* 标签 */
 .tag{display:inline-flex;align-items:center;font-size:12px;padding:3px 9px;border-radius:8px;border:1px solid var(--line);color:#555;background:#fff;line-height:1.4}
 .tag.on{background:var(--fg);color:#fff;border-color:var(--fg)}
 
-/* 搜索/筛选 */
 .search{margin:4px 0 10px}
 .search input{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--soft);outline:none}
 .search input:focus{background:#fff;border-color:#ddd}
@@ -166,7 +165,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .chip{flex-shrink:0;font-size:13px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);color:#555;background:#fff;white-space:nowrap}
 .chip.on{background:var(--fg);color:#fff;border-color:var(--fg)}
 
-/* 详情 */
 .detail{padding-top:6px}
 .d-title{font-size:24px;font-weight:600;line-height:1.35}
 .d-orig{font-size:13px;color:var(--sub);margin-top:4px}
@@ -183,7 +181,36 @@ h1,h2,h3{margin:0;font-weight:600}
 .d-actions{display:flex;gap:10px;margin-top:22px}
 .d-actions button{flex:1}
 
-/* 摘录 */
+/* ============ 评分区块（v0.12.3 展示态） ============ */
+.rate-block{padding:14px 0;border-top:1px solid var(--line)}
+
+.rate-total{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.total-label{font-size:13px;color:var(--sub);flex-shrink:0}
+.total-value{font-size:26px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+.total-value.empty{font-size:16px;font-weight:400;color:var(--sub2);letter-spacing:0}
+.total-max{font-size:14px;color:var(--sub);margin-left:2px;font-weight:400}
+
+.rate-total .icon-btn{margin-left:auto}
+
+.rate-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rate-cell{background:var(--soft);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.cell-label{font-size:12px;color:var(--sub);flex-shrink:0}
+.cell-value{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg)}
+.cell-value.empty{color:var(--sub2);font-weight:400;font-size:13px}
+
+/* 编辑面板行（复用现有 .rate-row 结构） */
+.rate-row{display:flex;align-items:center;gap:10px;padding:8px 0}
+.rate-label{width:70px;flex-shrink:0;font-size:13px;color:#555}
+.rate-label.bold{font-weight:600;color:var(--fg)}
+.rate-slider{flex:1;-webkit-appearance:none;height:24px;background:transparent;outline:none}
+.rate-slider::-webkit-slider-runnable-track{height:3px;background:#eee;border-radius:2px}
+.rate-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid var(--fg);margin-top:-9px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.rate-val{width:54px;text-align:right;font-size:13px;color:#333;font-variant-numeric:tabular-nums;flex-shrink:0}
+.rate-val.empty{color:var(--sub2);font-weight:400}
+
+.sheet-divider{height:1px;background:var(--line);margin:6px 0 4px}
+
+/* ============ 其它现有样式 ============ */
 .quote{border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
 .quote-text{font-size:14px;line-height:1.75;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
 .quote-text.open{-webkit-line-clamp:unset;overflow:visible}
@@ -194,7 +221,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .qedit{margin-left:auto;font-size:12px;color:var(--sub2)}
 .qdel{font-size:12px;color:var(--sub2)}
 
-/* 书籍选择器 */
 .picker-results{margin-top:6px;max-height:220px;overflow-y:auto}
 .picker-item{display:flex;flex-direction:column;align-items:flex-start;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:#fff;font-size:14px}
 .picker-item:active{background:var(--soft)}
@@ -203,51 +229,34 @@ h1,h2,h3{margin:0;font-weight:600}
 .picked{font-size:13px;color:#555;margin-top:6px}
 .field-static{padding:10px 12px;background:var(--soft);border-radius:11px;font-size:15px}
 
-/* 书单 */
 .listrow{display:flex;align-items:center;gap:10px;padding:15px 0;border-bottom:1px solid var(--line)}
 .chev{color:var(--sub2);font-size:18px}
 .listtools{display:flex;gap:10px;margin:6px 0 14px}
 .listtools button{flex:1}
 
-/* 标签管理 */
 .tagline{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--line)}
 .tagline .tag{min-width:auto}
 .tagcount{font-size:12px;color:var(--sub2);flex:1}
 
-/* 空状态 */
 .empty{text-align:center;color:var(--sub2);font-size:13px;padding:38px 0}
 
-/* 底部导航 */
-#tabbar{
-  position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(255,255,255,.96);
-  backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);
-  border-top:1px solid var(--line);z-index:50;padding-bottom:env(safe-area-inset-bottom);
-}
+#tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(255,255,255,.96);backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--line);z-index:50;padding-bottom:env(safe-area-inset-bottom)}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 7px;color:var(--sub2)}
 .tab.on{color:var(--fg)}
 .tab-ico{width:22px;height:22px;display:block}
 .tab-ico svg{width:22px;height:22px;display:block}
 .tab-lb{font-size:10px;letter-spacing:.2px}
 
-/* 弹窗 */
-#modalRoot .overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:100;display:flex;align-items:flex-end;justify-content:center;
-  animation:fade .16s ease;
-}
+#modalRoot .overlay{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:100;display:flex;align-items:flex-end;justify-content:center;animation:fade .16s ease}
 @keyframes fade{from{opacity:0}to{opacity:1}}
-.modal{
-  background:#fff;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;border-radius:20px 20px 0 0;
-  padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:up .2s ease;
-}
+.modal{background:#fff;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));animation:up .2s ease}
 @keyframes up{from{transform:translateY(18px);opacity:.6}to{transform:none;opacity:1}}
 .modal-h{font-size:17px;font-weight:600;margin-bottom:16px}
 .field{display:block;margin-bottom:14px}
 .field>span{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--sub);margin-bottom:6px}
 .field>span i{color:var(--danger);font-style:normal}
 .field>span b{font-weight:600;color:var(--fg);font-size:13px;font-variant-numeric:tabular-nums}
-.field input[type=text],.field input:not([type]),.field select,.field textarea{
-  width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--soft);outline:none;resize:vertical;
-}
+.field input[type=text],.field input:not([type]),.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--soft);outline:none;resize:vertical}
 .field input:focus,.field select:focus,.field textarea:focus{background:#fff;border-color:#ddd}
 .field input[type=range]{width:100%;margin:2px 0;-webkit-appearance:none;height:26px;background:transparent}
 .field input[type=range]::-webkit-slider-runnable-track{height:4px;background:#eee;border-radius:2px}
@@ -260,19 +269,21 @@ h1,h2,h3{margin:0;font-weight:600}
 .hint{font-size:12px;color:var(--sub);margin:0 0 10px}
 .export-area{width:100%;height:160px;border:1px solid var(--line);border-radius:11px;padding:10px;font-size:11px;background:var(--soft);font-family:ui-monospace,Menlo,monospace}
 
-/* 设置 */
+.tag-picker-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.tag-picker-wrap .tag{padding:6px 12px;font-size:13px}
+.tag-picker-wrap .tag:active{opacity:.6}
+.modal-actions .btn-plus{flex:0 0 auto;padding:10px 18px;font-size:16px;line-height:1;min-width:48px}
+
 .setting-row{display:flex;align-items:center;width:100%;padding:15px 0;border-bottom:1px solid var(--line);font-size:15px;text-align:left;background:none}
 .setting-row.danger{color:var(--danger)}
 .setting-row.plain{color:var(--sub);font-size:13px}
 
-/* 需求清单弹窗 */
 .req{font-size:13px;line-height:1.75;color:#333}
 .req h3{font-size:13.5px;font-weight:600;margin:16px 0 6px;color:var(--fg)}
 .req h3:first-child{margin-top:0}
 .req ul{margin:0;padding-left:18px}
 .req li{margin:2px 0}
 
-/* 登录页 */
 .auth-wrap{max-width:360px;margin:80px auto;padding:0 24px}
 .auth-title{font-size:22px;font-weight:600;margin-bottom:24px;line-height:1.35}
 .auth-input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:15px;background:var(--soft);outline:none}
@@ -282,21 +293,14 @@ h1,h2,h3{margin:0;font-weight:600}
 .auth-msg{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
 .auth-foot{font-size:12px;color:var(--sub2);margin-top:24px;text-align:center;line-height:1.7}
 
-/* Toast */
-#toast{
-  position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom));transform:translateX(-50%);
-  background:rgba(17,17,17,.92);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;
-  z-index:999;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px);text-align:center;
-}
+#toast{position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(17,17,17,.92);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;z-index:999;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px);text-align:center}
 #toast.show{opacity:1}
 
-/* 备份项 */
 .backup-item{padding:12px 0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .backup-info{flex:1;min-width:0}
 .backup-ts{font-size:14px;font-weight:500}
 .backup-meta{font-size:12px;color:var(--sub);margin-top:2px}
 
-/* 统计页 */
 .stat-blocks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
 .stat-block{border:1px solid var(--line);border-radius:12px;padding:16px 8px;text-align:center}
 .stat-block-n{font-size:22px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
@@ -346,6 +350,13 @@ const STATUSES = [
 const STATUS_MAP = Object.fromEntries(STATUSES.map(s=>[s.key,s.label]));
 const DEFAULT_TAGS = ['甜文','虐文','ABO','无限流','校园','都市','古代','重生','系统','娱乐圈','破镜重圆','追妻火葬场','短篇','长篇'];
 
+const SUB_RATES = [
+  {field:'plotScore',      label:'剧情线'},
+  {field:'romanceScore',   label:'感情线'},
+  {field:'characterScore', label:'人物塑造'},
+  {field:'sexScore',       label:'车戏水准'},
+];
+
 const TABS = [
   {name:'home',label:'首页'},
   {name:'library',label:'书库'},
@@ -361,6 +372,10 @@ const ICONS = {
   settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
 };
 const TAB_ROUTE = {home:'home',library:'library',book:'library',tags:'library',quotes:'quotes',bookquotes:'quotes',lists:'lists',list:'lists',settings:'settings',stats:'settings'};
+
+const SVG_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
+const SVG_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>';
+const SVG_SLIDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2"/></svg>';
 
 /* ============================================================
    2. 工具
@@ -385,14 +400,12 @@ function showToast(msg){
   toastTimer = setTimeout(()=> el.classList.remove('show'), 2600);
 }
 
-/* 防抖 */
 const inputTimers = {};
 function debouncedInput(key, fn, ms=200){
   clearTimeout(inputTimers[key]);
   inputTimers[key] = setTimeout(fn, ms);
 }
 
-/* 深拷贝 / 相等判断（增量同步用） */
 function cloneEntity(e){
   const o = {...e};
   if(Array.isArray(o.tags)) o.tags = [...o.tags];
@@ -440,8 +453,9 @@ function snapshotDB(d){
    ============================================================ */
 let db = null;
 let lastSynced = null;
+let rateSnapshots = {};
+let rateTimers = {};
 
-/* ⚠️ 填入你自己的 Supabase 项目信息 */
 const SUPABASE_URL = 'https://bdtadwgfecqebhkgkmaj.supabase.co/';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkdGFkd2dmZWNxZWJoa2drbWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDA0NTEsImV4cCI6MjEwODU3NjQ1MX0.huXw_x8SAdN8q2gdJjW_XXo5Fik9Zy8R0E6ckc-qvro';
 
@@ -456,6 +470,20 @@ function seedDB(){
     lists: [],
     quotes: [],
   };
+}
+
+function initRateSnapshots(){
+  rateSnapshots = {};
+  if(!db) return;
+  db.books.forEach(b => {
+    rateSnapshots[b.id] = {
+      rating: Number(b.rating) || 0,
+      plotScore: Number(b.plotScore) || 0,
+      romanceScore: Number(b.romanceScore) || 0,
+      characterScore: Number(b.characterScore) || 0,
+      sexScore: Number(b.sexScore) || 0,
+    };
+  });
 }
 
 function saveLocalBackup(){
@@ -474,7 +502,10 @@ function saveLocalBackup(){
     });
     arr = arr.slice(0, 3);
     localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
-  }catch(e){ console.warn('本地备份失败：', e); }
+  }catch(e){
+    console.warn('本地备份失败：', e);
+    showToast('本地备份失败（云端已保存），可能存储空间不足');
+  }
 }
 function loadLocalBackups(){
   try{
@@ -494,6 +525,10 @@ function bookToRow(b, uidv){
     type: b.type,
     status: b.status,
     rating: b.rating || 0,
+    plot_score: b.plotScore || 0,
+    romance_score: b.romanceScore || 0,
+    character_score: b.characterScore || 0,
+    sex_score: b.sexScore || 0,
     review: b.review || '',
     tags: b.tags || [],
     created_at: b.createdAt,
@@ -508,7 +543,7 @@ function quoteToRow(q, uidv){ return { id: q.id, user_id: uidv, book_id: q.bookI
 const Store = {
   async load(){
     const { data: { user }, error: ue } = await sb.auth.getUser();
-    if(ue || !user){ db = null; lastSynced = null; return; }
+    if(ue || !user){ db = null; lastSynced = null; rateSnapshots = {}; return; }
 
     const [b, t, l, q] = await Promise.all([
       sb.from('books').select('*').eq('user_id', user.id),
@@ -532,6 +567,10 @@ const Store = {
         type: row.type || '原创',
         status: row.status || 'todo',
         rating: Number(row.rating) || 0,
+        plotScore: Number(row.plot_score) || 0,
+        romanceScore: Number(row.romance_score) || 0,
+        characterScore: Number(row.character_score) || 0,
+        sexScore: Number(row.sex_score) || 0,
         review: row.review || '',
         tags: row.tags || [],
         createdAt: Number(row.created_at) || Date.now(),
@@ -550,6 +589,7 @@ const Store = {
     };
 
     lastSynced = snapshotDB(db);
+    initRateSnapshots();
 
     if(db.tags.length === 0){
       db.tags = DEFAULT_TAGS.map(n => ({ id: uid('t'), name: n, builtin: true }));
@@ -568,6 +608,7 @@ const Store = {
         await this._incrementalSave(uidv);
       }
       lastSynced = snapshotDB(db);
+      initRateSnapshots();
       saveLocalBackup();
     }catch(e){
       console.error('保存到云端失败：', e);
@@ -599,26 +640,38 @@ const Store = {
     const dLists  = diffList(db.lists,  lastSynced.lists);
     const dQuotes = diffList(db.quotes, lastSynced.quotes);
 
-    const delTasks = [];
-    if(dBooks.del.length)  delTasks.push(sb.from('books').delete().eq('user_id', uidv).in('id', dBooks.del));
-    if(dTags.del.length)   delTasks.push(sb.from('tags').delete().eq('user_id', uidv).in('id', dTags.del));
-    if(dLists.del.length)  delTasks.push(sb.from('lists').delete().eq('user_id', uidv).in('id', dLists.del));
-    if(dQuotes.del.length) delTasks.push(sb.from('quotes').delete().eq('user_id', uidv).in('id', dQuotes.del));
-    if(delTasks.length){
-      const res = await Promise.all(delTasks);
-      const failed = res.find(r => r.error);
-      if(failed) throw new Error(failed.error.message || '删除失败');
+    if(dTags.upsert.length){
+      const { error } = await sb.from('tags').upsert(dTags.upsert.map(t => tagToRow(t, uidv)), {onConflict:'id'});
+      if(error) throw new Error(error.message || '标签写入失败');
+    }
+    if(dLists.upsert.length){
+      const { error } = await sb.from('lists').upsert(dLists.upsert.map(l => listToRow(l, uidv)), {onConflict:'id'});
+      if(error) throw new Error(error.message || '书单写入失败');
+    }
+    if(dBooks.upsert.length){
+      const { error } = await sb.from('books').upsert(dBooks.upsert.map(b => bookToRow(b, uidv)), {onConflict:'id'});
+      if(error) throw new Error(error.message || '书籍写入失败');
+    }
+    if(dQuotes.upsert.length){
+      const { error } = await sb.from('quotes').upsert(dQuotes.upsert.map(q => quoteToRow(q, uidv)), {onConflict:'id'});
+      if(error) throw new Error(error.message || '摘录写入失败');
     }
 
-    const ups = [];
-    if(dBooks.upsert.length)  ups.push(sb.from('books').upsert(dBooks.upsert.map(b => bookToRow(b, uidv)), {onConflict:'id'}));
-    if(dTags.upsert.length)   ups.push(sb.from('tags').upsert(dTags.upsert.map(t => tagToRow(t, uidv)), {onConflict:'id'}));
-    if(dLists.upsert.length)  ups.push(sb.from('lists').upsert(dLists.upsert.map(l => listToRow(l, uidv)), {onConflict:'id'}));
-    if(dQuotes.upsert.length) ups.push(sb.from('quotes').upsert(dQuotes.upsert.map(q => quoteToRow(q, uidv)), {onConflict:'id'}));
-    if(ups.length){
-      const res = await Promise.all(ups);
-      const failed = res.find(r => r.error);
-      if(failed) throw new Error(failed.error.message || '写入失败');
+    if(dQuotes.del.length){
+      const { error } = await sb.from('quotes').delete().eq('user_id', uidv).in('id', dQuotes.del);
+      if(error) throw new Error(error.message || '摘录删除失败');
+    }
+    if(dBooks.del.length){
+      const { error } = await sb.from('books').delete().eq('user_id', uidv).in('id', dBooks.del);
+      if(error) throw new Error(error.message || '书籍删除失败');
+    }
+    if(dLists.del.length){
+      const { error } = await sb.from('lists').delete().eq('user_id', uidv).in('id', dLists.del);
+      if(error) throw new Error(error.message || '书单删除失败');
+    }
+    if(dTags.del.length){
+      const { error } = await sb.from('tags').delete().eq('user_id', uidv).in('id', dTags.del);
+      if(error) throw new Error(error.message || '标签删除失败');
     }
   },
 
@@ -637,27 +690,101 @@ const Store = {
     await sb.auth.signOut();
     db = null;
     lastSynced = null;
+    rateSnapshots = {};
+    rateTimers = {};
   }
 };
 
+async function saveBookRates(bookId){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) throw new Error('未登录');
+  const book = db.books.find(x=>x.id===bookId);
+  if(!book) throw new Error('书籍不存在');
+
+  const { error } = await sb.from('books').upsert(bookToRow(book, user.id), {onConflict:'id'});
+  if(error) throw new Error(error.message || '评分保存失败');
+
+  if(lastSynced && lastSynced.books){
+    lastSynced.books.set(bookId, cloneEntity(book));
+  }
+  rateSnapshots[bookId] = {
+    rating: Number(book.rating) || 0,
+    plotScore: Number(book.plotScore) || 0,
+    romanceScore: Number(book.romanceScore) || 0,
+    characterScore: Number(book.characterScore) || 0,
+    sexScore: Number(book.sexScore) || 0,
+  };
+  saveLocalBackup();
+}
+
+function scheduleSaveRates(bookId){
+  if(rateTimers[bookId]) clearTimeout(rateTimers[bookId]);
+  rateTimers[bookId] = setTimeout(async ()=>{
+    delete rateTimers[bookId];
+    try{
+      await saveBookRates(bookId);
+    }catch(e){
+      const snap = rateSnapshots[bookId];
+      const book = db.books.find(x=>x.id===bookId);
+      if(book && snap) Object.assign(book, snap);
+      if(route.name === 'book' && route.params.id === bookId) render();
+      showToast(e.message || '评分保存失败');
+    }
+  }, 600);
+}
+
 /* ============================================================
-   4. 路由
+   4. 路由 & 视图状态
    ============================================================ */
 let route = {name:'home', params:{}};
 let navStack = [];
 
-function go(name, params={}){ navStack.push({name:route.name,params:route.params}); route={name,params}; render(); window.scrollTo(0,0); }
-function back(){ route = navStack.pop() || {name:'home',params:{}}; render(); window.scrollTo(0,0); }
-function switchTab(name){ navStack=[]; route={name,params:{}}; render(); window.scrollTo(0,0); }
-
 let libFilter = { q:'', status:'all', tag:null };
 let libSort = { byRating:false };
+let libVisibleCount = 10;
 let quoteFilter = { q:'' };
 let tagFilter = { q:'' };
 let pickFilter = { q:'' };
 let currentPickListId = null;
 let expandedQuotes = new Set();
 let expandedQuoteCards = new Set();
+let expandedBookQuotes = new Set();
+
+let libraryScrollY = 0;
+let needRefreshBookDetail = false;
+
+function clearModalSilently(){
+  document.getElementById('modalRoot').innerHTML = '';
+  currentPickListId = null;
+  needRefreshBookDetail = false;
+}
+
+function go(name, params={}){
+  clearModalSilently();
+  navStack.push({name:route.name,params:route.params});
+  route={name,params};
+  render();
+  window.scrollTo(0,0);
+}
+function back(){
+  clearModalSilently();
+  route = navStack.pop() || {name:'home',params:{}};
+  render();
+  if(route.name === 'library' && libraryScrollY > 0){
+    const y = libraryScrollY;
+    requestAnimationFrame(()=> window.scrollTo(0, y));
+  } else {
+    window.scrollTo(0, 0);
+  }
+}
+function switchTab(name){
+  clearModalSilently();
+  navStack=[];
+  route={name,params:{}};
+  if(name === 'library') libVisibleCount = 10;
+  render();
+  window.scrollTo(0,0);
+}
 
 /* ============================================================
    5. 渲染入口
@@ -862,7 +989,15 @@ function bookListHTML(){
   }
 
   if(!arr.length) return `<div class="empty">没有找到书籍</div>`;
-  return arr.map(bookRow).join('');
+
+  const visible = arr.slice(0, libVisibleCount);
+  const rest = arr.length - visible.length;
+
+  let html = visible.map(bookRow).join('');
+  if(rest > 0){
+    html += `<button class="btn-ghost" data-act="libLoadMore" style="width:100%;margin-top:16px">加载更多（剩余 ${rest} 条）</button>`;
+  }
+  return html;
 }
 
 /* ============================================================
@@ -879,6 +1014,27 @@ function viewBook(id){
 
   const statusBtns = STATUSES.map(s=>`<button class="status-btn ${b.status===s.key?'on st-'+s.key:'off'}" data-act="quickStatus" data-id="${id}" data-status="${s.key}">${s.label}</button>`).join('');
 
+  const showAll = expandedBookQuotes.has(id);
+  const visibleQuotes = showAll ? quotes : quotes.slice(0, 3);
+  const hidden = quotes.length - 3;
+
+  /* v0.12.3 评分展示态 */
+  const ratingVal = Number(b.rating) || 0;
+  const ratingDisp = ratingVal > 0
+    ? `${ratingVal.toFixed(1)}<span class="total-max">/10.0</span>`
+    : '未评分';
+  const ratingClass = ratingVal > 0 ? '' : 'empty';
+
+  const gridCells = SUB_RATES.map(s=>{
+    const v = Number(b[s.field]) || 0;
+    const disp = v > 0 ? v.toFixed(1) : '未评';
+    const cls = v > 0 ? '' : 'empty';
+    return `<div class="rate-cell">
+      <span class="cell-label">${s.label}</span>
+      <span class="cell-value ${cls}" id="rate_cell_${id}_${s.field}">${disp}</span>
+    </div>`;
+  }).join('');
+
   return `<div class="page">
     <header class="topbar">
       <button class="btn-icon" data-act="back">‹</button>
@@ -894,18 +1050,29 @@ function viewBook(id){
 
       ${b.author?`<div class="d-line"><span class="k">作者</span><span>${esc(b.author)}</span></div>`:''}
       ${b.characters?`<div class="d-line"><span class="k">角色姓名</span><span>${esc(b.characters)}</span></div>`:''}
-      <div class="d-line"><span class="k">评分</span><span>${b.rating>0?b.rating.toFixed(1)+' / 10':'未评分'}</span></div>
       <div class="d-line"><span class="k">加入时间</span><span>${fmtDate(b.createdAt)}</span></div>
 
+      <div class="rate-block">
+        <div class="rate-total">
+          <span class="total-label">评分</span>
+          <span class="total-value ${ratingClass}" id="rate_total_${id}">${ratingDisp}</span>
+          <button class="icon-btn" data-act="openRateEditor" data-id="${id}" aria-label="调整评分">${SVG_SLIDER}</button>
+        </div>
+        <div class="rate-grid">${gridCells}</div>
+      </div>
+
       <div class="d-block">
-        <div class="k">标签</div>
+        <div class="k-head">
+          <span>标签</span>
+          <button class="icon-btn" data-act="openTagPicker" data-id="${id}" aria-label="添加标签">${SVG_PLUS}</button>
+        </div>
         <div class="tagwrap">${tagHtml}</div>
       </div>
 
       <div class="d-block">
         <div class="k-head">
           <span>所属书单</span>
-          <button class="btn-mini" data-act="addToLists" data-id="${id}">+</button>
+          <button class="icon-btn" data-act="addToLists" data-id="${id}" aria-label="添加书单">${SVG_PLUS}</button>
         </div>
         <div class="tagwrap">${inLists.length
           ? inLists.map(l=>`<button class="tag" data-act="openList" data-id="${l.id}">${esc(l.name)}</button>`).join('')
@@ -913,17 +1080,20 @@ function viewBook(id){
       </div>
 
       <div class="d-block">
-        <div class="k">简评</div>
+        <div class="k-head">
+          <span>简评</span>
+          <button class="icon-btn" data-act="openReviewEdit" data-id="${id}" aria-label="编辑简评">${SVG_PENCIL}</button>
+        </div>
         <div class="d-review">${b.review?esc(b.review):'<span style="color:#b3b3b3;font-size:13px">暂无</span>'}</div>
       </div>
 
       <div class="d-block">
         <div class="k-head">
           <span>摘录（${quotes.length}）</span>
-          <button class="btn-mini" data-act="newQuoteFor" data-id="${id}">+</button>
+          <button class="icon-btn" data-act="newQuoteFor" data-id="${id}" aria-label="添加摘录">${SVG_PLUS}</button>
         </div>
         ${quotes.length
-          ? quotes.map(q=>`<div class="quote">
+          ? visibleQuotes.map(q=>`<div class="quote">
               <div class="quote-text-static">${esc(q.text)}</div>
               ${q.thought?`<div class="quote-thought">${esc(q.thought)}</div>`:''}
               <div class="quote-meta">
@@ -932,6 +1102,7 @@ function viewBook(id){
                 <button class="qdel" data-act="delQuote" data-id="${q.id}">删除</button>
               </div>
             </div>`).join('')
+            + (hidden > 0 ? `<button class="btn-ghost" style="width:100%;margin-top:10px" data-act="toggleBookQuotes" data-id="${id}">${showAll?'收起':`展开更多（${hidden} 条）`}</button>` : '')
           : '<div class="empty" style="padding:20px 0">还没有摘录</div>'}
       </div>
 
@@ -940,6 +1111,40 @@ function viewBook(id){
       </div>
     </div>
   </div>`;
+}
+
+/* ============================================================
+   9.5 评分展示刷新（编辑面板拖动时局部更新展示区）
+   ============================================================ */
+function refreshRateDisplay(bookId){
+  const b = db.books.find(x=>x.id===bookId);
+  if(!b) return;
+
+  const totalEl = document.getElementById(`rate_total_${bookId}`);
+  if(totalEl){
+    const v = Number(b.rating) || 0;
+    if(v > 0){
+      totalEl.classList.remove('empty');
+      totalEl.innerHTML = v.toFixed(1) + '<span class="total-max">/10.0</span>';
+    } else {
+      totalEl.classList.add('empty');
+      totalEl.textContent = '未评分';
+    }
+  }
+
+  SUB_RATES.forEach(s=>{
+    const el = document.getElementById(`rate_cell_${bookId}_${s.field}`);
+    if(el){
+      const v = Number(b[s.field]) || 0;
+      if(v > 0){
+        el.textContent = v.toFixed(1);
+        el.classList.remove('empty');
+      } else {
+        el.textContent = '未评';
+        el.classList.add('empty');
+      }
+    }
+  });
 }
 
 /* ============================================================
@@ -1094,7 +1299,7 @@ function viewSettings(){
       <div class="sec-h"><span>关于</span></div>
       <button class="setting-row" data-act="showRequirements">需求清单</button>
       <div class="setting-row plain">数据已启用云端同步（Supabase）</div>
-      <div class="setting-row plain">版本 0.11.0</div>
+      <div class="setting-row plain">版本 0.12.3</div>
     </div>
   </div>`;
 }
@@ -1177,70 +1382,56 @@ const REQ_DOC = `
 <div class="req">
   <h3>1. 书库</h3>
   <ul>
-    <li>添加、删除、查询书籍</li>
-    <li>状态：待读 / 在读 / 已读 / 弃读 / 已重读（底色区分）</li>
-    <li>添加书籍表单的标签区可直接新建标签，按钮只显示「＋」</li>
+    <li>添加、删除、查询书籍；状态 5 种（底色区分）</li>
     <li>选填字段：角色姓名</li>
     <li>搜索支持书名 / 原名 / 作者 / 标签 / 地区 / 类型，200ms 防抖</li>
-    <li>按评分排序（分数一致按书名顺序），可取消排序；箭头用 SVG，iOS/安卓一致</li>
+    <li>按评分排序（同分按书名），箭头用 SVG，可取消</li>
+    <li>分页：初始 10 条，点击加载更多每次 +10</li>
   </ul>
   <h3>2. 书籍详情</h3>
   <ul>
-    <li>显示状态、基本信息、所属书单、打分、简评、角色姓名</li>
-    <li>顶部状态按钮组：点击直接切换状态，即时保存，失败自动回滚</li>
-    <li>可从已有书单中选择加入 / 移出，也可在弹窗内新建书单</li>
-    <li>摘录可即时编辑内容与感想</li>
+    <li>顶部状态按钮组，点击直接切换状态</li>
+    <li>评分区展示态：评分行（评分 + 分数 + 调节图标）+ 两列两行网格</li>
+    <li>点击调节图标弹出底部编辑面板，总评分 + 四个子评分滑块</li>
+    <li>拖动滑块实时联动展示区；600ms 后独立保存，失败回滚</li>
+    <li>0 分显示「未评分」/「未评」；调评分不更新 updatedAt</li>
+    <li>简评：右上角铅笔图标触发编辑弹窗，输入框 11 行</li>
+    <li>标签、所属书单、摘录三处添加按钮统一为「＋」小图标</li>
+    <li>标签弹窗：圆角框并排显示，点击切换高亮；底部「＋」新建</li>
+    <li>摘录初始 3 条，「展开更多 / 收起」</li>
   </ul>
   <h3>3. 标签</h3>
   <ul>
-    <li>预置常用标签，可新建、重命名、删除</li>
-    <li>点击标签进入书库筛选</li>
-    <li>标签页支持搜索（200ms 防抖）</li>
+    <li>预置常用标签，可新建、重命名、删除；点击进书库筛选；标签页搜索</li>
   </ul>
   <h3>4. 摘录</h3>
   <ul>
-    <li>对应到书，可选感想，独立摘录库</li>
-    <li>按时间倒序，支持关键词搜索（200ms 防抖）</li>
-    <li>添加摘录时书籍改为搜索选择，点击搜索框显示最近摘录过的书（最多 5 条）</li>
-    <li>摘录内容与感想可即时编辑</li>
-    <li>摘录库内单条内容最多显示 5 行，超出可点击展开 / 收起</li>
+    <li>独立摘录库；按时间倒序；搜索防抖；书籍搜索（最近 5 条）；可编辑</li>
   </ul>
   <h3>5. 书单</h3>
   <ul>
-    <li>自定义书单，手动排序（上移 / 下移）</li>
-    <li>一本书可属于多个书单</li>
-    <li>书单内添加书籍时支持搜索（200ms 防抖）</li>
-    <li>添加书籍后书单页与候选列表即时刷新</li>
+    <li>自定义、排序；添加书籍支持搜索并即时刷新</li>
   </ul>
   <h3>6. 首页</h3>
   <ul>
-    <li>快捷入口：书库 / 摘录 / 书单 / 标签</li>
-    <li>快捷添加书籍按钮</li>
-    <li>阅读状态统计、正在读、最新动态、最近摘录</li>
-    <li>默认标题「Read and Record BL」，点击可改名，写入用户元数据</li>
+    <li>快捷入口、添加书籍、状态统计、正在读、最新动态、最近摘录</li>
+    <li>默认标题「Read and Record BL」，点击改名，写入用户元数据</li>
   </ul>
   <h3>7. 设置</h3>
   <ul>
-    <li>JSON 导出 / 导入备份</li>
-    <li>本地备份与恢复（最近 3 份）</li>
-    <li>清空数据、退出登录</li>
-    <li>阅读统计入口</li>
+    <li>JSON 导入导出、本地备份恢复、阅读统计、清空、退出登录</li>
   </ul>
-  <h3>8. 阅读统计（v0.11.0 新增）</h3>
+  <h3>8. 阅读统计</h3>
   <ul>
-    <li>今年读完（按 status=已读/已重读 且状态更新年份=今年）</li>
-    <li>平均评分（仅统计有评分的书）</li>
-    <li>藏书总数</li>
-    <li>五种状态分布条形图</li>
-    <li>今年 1–12 月每月读完书本数柱状图</li>
+    <li>今年读完、平均评分、藏书总数、状态分布、按月趋势</li>
   </ul>
   <h3>9. 数据安全与性能</h3>
   <ul>
-    <li>保存为增量同步（对比快照，仅同步变化的行）</li>
-    <li>保存失败 Toast 提示，按钮恢复</li>
-    <li>每次保存成功后自动本地快照（保留 3 份）</li>
-    <li>导入 / 清空 / 恢复备份后自动全量同步</li>
-    <li>搜索防抖 200ms：书库、摘录、标签、选书弹窗、添加摘录的书籍搜索</li>
+    <li>增量同步串行：先 upsert 再 delete，失败立即中断</li>
+    <li>评分独立保存，失败回滚</li>
+    <li>本地备份失败 Toast</li>
+    <li>详情页返回书库恢复滚动位置</li>
+    <li>搜索防抖 200ms</li>
   </ul>
 </div>`;
 
@@ -1251,9 +1442,13 @@ function openModal(html){
   document.getElementById('modalRoot').innerHTML =
     `<div class="overlay" id="modalOverlay"><div class="modal">${html}</div></div>`;
 }
+
 function closeModal(){
   document.getElementById('modalRoot').innerHTML = '';
   currentPickListId = null;
+  const need = needRefreshBookDetail;
+  needRefreshBookDetail = false;
+  if(need && route.name === 'book') render();
 }
 
 /* ============================================================
@@ -1261,8 +1456,21 @@ function closeModal(){
    ============================================================ */
 function openBookForm(bookId){
   const b = bookId ? db.books.find(x=>x.id===bookId) : null;
-  const d = b || {title:'',originalTitle:'',author:'',characters:'',region:'中国大陆',type:'原创',status:'todo',rating:0,review:'',tags:[]};
+  const d = b || {
+    title:'', originalTitle:'', author:'', characters:'',
+    region:'中国大陆', type:'原创', status:'todo',
+    rating:0, plotScore:0, romanceScore:0, characterScore:0, sexScore:0,
+    review:'', tags:[]
+  };
   const tagHtml = db.tags.map(t=>`<button type="button" class="tag ${(d.tags||[]).includes(t.name)?'on':''}" data-act="formTag" data-name="${esc(t.name)}">${esc(t.name)}</button>`).join('');
+
+  const subFieldsHtml = SUB_RATES.map(s=>{
+    const v = Number(d[s.field]) || 0;
+    return `<div class="field"><span>${s.label} <b id="sub_${s.field}_out">${v.toFixed(1)}</b></span>
+      <input type="range" name="${s.field}" class="sub-rating" data-field="${s.field}" min="0" max="10" step="0.1" value="${v}">
+    </div>`;
+  }).join('');
+
   openModal(`
     <form id="bookForm" data-id="${b?b.id:''}" data-submitting="0">
       <div class="modal-h">${b?'编辑书籍':'添加书籍'}</div>
@@ -1282,12 +1490,13 @@ function openBookForm(bookId){
         </div>
         <input type="hidden" name="status" value="${d.status}">
       </div>
-      <div class="field"><span>评分 <b id="ratingOut">${d.rating>0?d.rating.toFixed(1):'未评分'}</b></span>
+      <div class="field"><span>总评分 <b id="ratingOut">${d.rating>0?d.rating.toFixed(1):'未评分'}</b></span>
         <input type="range" name="rating" id="ratingRange" min="0" max="10" step="0.1" value="${d.rating||0}">
       </div>
+      ${subFieldsHtml}
       <label class="field"><span>简评</span><textarea name="review" rows="3" placeholder="选填">${esc(d.review||'')}</textarea></label>
       <div class="field">
-        <span>标签 <button type="button" class="btn-mini" data-act="formNewTag" title="新建标签" style="min-width:auto;padding:3px 8px">＋</button></span>
+        <span>标签 <button type="button" class="btn-mini" data-act="formNewTag" style="min-width:auto;padding:3px 8px">＋</button></span>
         <div class="tagwrap" id="formTags">${tagHtml||'<span style="color:#b3b3b3;font-size:13px">还没有标签，点右侧新建</span>'}</div>
       </div>
       <div class="modal-actions">
@@ -1295,6 +1504,65 @@ function openBookForm(bookId){
         <button type="submit" class="btn-primary">保存</button>
       </div>
     </form>
+  `);
+}
+
+/* ============================================================
+   16.5 简评弹窗
+   ============================================================ */
+function openReviewEditModal(bookId){
+  const b = db.books.find(x=>x.id===bookId);
+  if(!b) return;
+  openModal(`
+    <form id="reviewEditForm" data-id="${bookId}" data-submitting="0">
+      <div class="modal-h">编辑简评</div>
+      <label class="field"><span>简评</span><textarea name="review" rows="11" placeholder="选填">${esc(b.review||'')}</textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-act="closeModal">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  `);
+}
+
+/* ============================================================
+   16.6 评分编辑面板（v0.12.3 新增）
+   ============================================================ */
+function openRateEditor(bookId){
+  const b = db.books.find(x=>x.id===bookId);
+  if(!b) return;
+
+  const ratingVal = Number(b.rating) || 0;
+  const ratingDisp = ratingVal > 0 ? ratingVal.toFixed(1) : '未评分';
+  const ratingCls = ratingVal > 0 ? '' : 'empty';
+
+  const subRows = SUB_RATES.map(s=>{
+    const v = Number(b[s.field]) || 0;
+    const disp = v > 0 ? v.toFixed(1) : '未评';
+    const cls = v > 0 ? '' : 'empty';
+    return `<div class="rate-row">
+      <span class="rate-label">${s.label}</span>
+      <input type="range" class="rate-slider rate-input" data-bid="${bookId}" data-field="${s.field}" data-is-total="0" min="0" max="10" step="0.1" value="${v}">
+      <span class="rate-val ${cls}" id="rate_edit_${bookId}_${s.field}">${disp}</span>
+    </div>`;
+  }).join('');
+
+  openModal(`
+    <div class="modal-h">调整评分</div>
+
+    <div class="rate-row">
+      <span class="rate-label bold">总评分</span>
+      <input type="range" class="rate-slider rate-input" data-bid="${bookId}" data-field="rating" data-is-total="1" min="0" max="10" step="0.1" value="${ratingVal}">
+      <span class="rate-val ${ratingCls}" id="rate_edit_${bookId}_rating">${ratingDisp}</span>
+    </div>
+
+    <div class="sheet-divider"></div>
+
+    ${subRows}
+
+    <div class="modal-actions">
+      <button type="button" class="btn-primary" data-act="closeModal">完成</button>
+    </div>
   `);
 }
 
@@ -1310,18 +1578,16 @@ function recentQuoteBooks(){
     seen.add(q.bookId);
     const b = db.books.find(x=>x.id===q.bookId);
     if(b) arr.push(b);
-    if(arr.length >= 5) break;   /* v0.11.0：最多 5 条 */
+    if(arr.length >= 5) break;
   }
   return arr;
 }
-
 function bookPickerItemsHTML(arr){
   return arr.map(b=>`<button type="button" class="picker-item" data-act="pickQuoteBook" data-id="${b.id}">
     <span>${esc(b.title)}</span>
     <span class="picker-sub">${esc(b.author||'佚名')} · ${esc(b.region)}</span>
   </button>`).join('');
 }
-
 function renderRecentBookPicker(){
   const box = document.getElementById('bookPickerResults');
   if(!box) return;
@@ -1333,7 +1599,6 @@ function renderRecentBookPicker(){
 function openQuoteForm(bookId){
   if(!db.books.length){ alert('请先添加至少一本书'); return; }
   const fixedBook = bookId ? db.books.find(x=>x.id===bookId) : null;
-
   openModal(`
     <form id="quoteForm" data-book="${bookId||''}" data-submitting="0">
       <div class="modal-h">添加摘录</div>
@@ -1356,9 +1621,6 @@ function openQuoteForm(bookId){
   `);
 }
 
-/* ============================================================
-   18. 编辑摘录表单
-   ============================================================ */
 function openQuoteEditForm(quoteId){
   const q = db.quotes.find(x=>x.id===quoteId);
   if(!q) return;
@@ -1376,7 +1638,7 @@ function openQuoteEditForm(quoteId){
 }
 
 /* ============================================================
-   19. 书籍 -> 书单选择弹窗
+   18. 书籍 -> 书单选择弹窗
    ============================================================ */
 function openListPicker(bookId){
   if(!db.books.some(b=>b.id===bookId)) return;
@@ -1405,7 +1667,33 @@ function openListPicker(bookId){
 }
 
 /* ============================================================
-   20. 书单内添加书籍
+   18.5 书籍 -> 标签选择弹窗
+   ============================================================ */
+function openBookTagPicker(bookId){
+  const b = db.books.find(x=>x.id===bookId);
+  if(!b) return;
+  const cur = new Set(b.tags || []);
+
+  const tagsHtml = db.tags.length
+    ? db.tags.map(t=>{
+        const inIt = cur.has(t.name);
+        return `<button type="button" class="tag ${inIt?'on':''}" data-act="toggleBookTag" data-bid="${bookId}" data-name="${esc(t.name)}">${esc(t.name)}</button>`;
+      }).join('')
+    : '<div class="empty" style="padding:20px 0;width:100%">还没有标签，点下方 ＋ 新建</div>';
+
+  openModal(`
+    <div class="modal-h">选择标签</div>
+    <p class="hint">点击切换添加 / 移除</p>
+    <div class="tag-picker-wrap" id="tagPickerWrap">${tagsHtml}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost btn-plus" data-act="newTagForBook" data-bid="${bookId}" aria-label="新建标签">＋</button>
+      <button type="button" class="btn-primary" data-act="closeModal">完成</button>
+    </div>
+  `);
+}
+
+/* ============================================================
+   19. 书单内添加书籍
    ============================================================ */
 function pickResultsHTML(listId){
   const l = db.lists.find(x=>x.id===listId);
@@ -1452,7 +1740,7 @@ function openPickBooks(listId){
 }
 
 /* ============================================================
-   20.5 本地备份
+   20. 本地备份
    ============================================================ */
 function openLocalBackupsModal(){
   const arr = loadLocalBackups();
@@ -1488,7 +1776,9 @@ async function restoreBackup(ts){
   db = {
     version: 2,
     settings: { title: b.title || DEFAULT_TITLE },
-    books: (b.books || []).map(x => ({ characters:'', ...x })),
+    books: (b.books || []).map(x => ({
+      characters:'', plotScore:0, romanceScore:0, characterScore:0, sexScore:0, ...x,
+    })),
     tags: b.tags || [],
     lists: b.lists || [],
     quotes: b.quotes || [],
@@ -1517,7 +1807,7 @@ document.addEventListener('click', async (e)=>{
   switch(act){
     case 'switchTab': switchTab(el.dataset.tab); break;
     case 'go':
-      if(el.dataset.to==='library'){ libFilter={q:'',status:'all',tag:null}; }
+      if(el.dataset.to==='library'){ libFilter={q:'',status:'all',tag:null}; libVisibleCount = 10; }
       switchTab(el.dataset.to); break;
     case 'back': back(); break;
 
@@ -1567,13 +1857,27 @@ document.addEventListener('click', async (e)=>{
       break;
     }
 
-    case 'toggleRatingSort': {
-      libSort.byRating = !libSort.byRating;
+    case 'toggleBookQuotes': {
+      if(expandedBookQuotes.has(id)) expandedBookQuotes.delete(id);
+      else expandedBookQuotes.add(id);
       render();
       break;
     }
 
-    /* v0.11.0：详情页快速切换状态 */
+    case 'toggleRatingSort': {
+      libSort.byRating = !libSort.byRating;
+      libVisibleCount = 10;
+      render();
+      break;
+    }
+
+    case 'libLoadMore': {
+      libVisibleCount += 10;
+      const wrap = document.getElementById('bookList');
+      if(wrap) wrap.innerHTML = bookListHTML();
+      break;
+    }
+
     case 'quickStatus': {
       const bid = el.dataset.id;
       const newStatus = el.dataset.status;
@@ -1597,9 +1901,57 @@ document.addEventListener('click', async (e)=>{
       break;
     }
 
+    case 'openReviewEdit': openReviewEditModal(id); break;
+    case 'openRateEditor': openRateEditor(id); break;
+
+    case 'openTagPicker': openBookTagPicker(id); break;
+    case 'toggleBookTag': {
+      const bid = el.dataset.bid;
+      const name = el.dataset.name;
+      const b = db.books.find(x=>x.id===bid);
+      if(!b) break;
+      if(!b.tags) b.tags = [];
+      const wasIn = b.tags.includes(name);
+      if(wasIn) b.tags = b.tags.filter(t=>t!==name);
+      else b.tags.push(name);
+      b.updatedAt = Date.now();
+      try{
+        await Store.save();
+        el.classList.toggle('on', !wasIn);
+        needRefreshBookDetail = true;
+      }catch(e){
+        if(wasIn) b.tags.push(name);
+        else b.tags = b.tags.filter(t=>t!==name);
+      }
+      break;
+    }
+    case 'newTagForBook': {
+      const bid = el.dataset.bid;
+      const b = db.books.find(x=>x.id===bid);
+      if(!b) break;
+      const name = (prompt('新标签名称')||'').trim();
+      if(!name) break;
+      if(!db.tags.some(t=>t.name===name)){
+        db.tags.push({id:uid('t'), name, builtin:false});
+      }
+      if(!b.tags) b.tags = [];
+      if(!b.tags.includes(name)) b.tags.push(name);
+      b.updatedAt = Date.now();
+      try{
+        await Store.save();
+        needRefreshBookDetail = true;
+        openBookTagPicker(bid);
+      }catch(e){}
+      break;
+    }
+
     case 'newBook': openBookForm(); break;
     case 'editBook': openBookForm(id); break;
-    case 'openBook': go('book',{id}); break;
+    case 'openBook': {
+      if(route.name === 'library') libraryScrollY = window.scrollY;
+      go('book',{id});
+      break;
+    }
     case 'delBook': {
       const b = db.books.find(x=>x.id===id);
       if(!b) break;
@@ -1613,18 +1965,22 @@ document.addEventListener('click', async (e)=>{
 
     case 'filterStatus':
       libFilter = {q:'', status:el.dataset.status, tag:null};
+      libVisibleCount = 10;
       switchTab('library');
       break;
     case 'setStatusFilter':
       libFilter.status = el.dataset.status;
+      libVisibleCount = 10;
       render();
       break;
     case 'clearTagFilter':
       libFilter.tag = null;
+      libVisibleCount = 10;
       render();
       break;
     case 'tagToLibrary':
       libFilter = {q:'', status:'all', tag:el.dataset.name};
+      libVisibleCount = 10;
       switchTab('library');
       break;
 
@@ -1663,9 +2019,25 @@ document.addEventListener('click', async (e)=>{
       const l = db.lists.find(x=>x.id===el.dataset.list);
       const bid = el.dataset.bid;
       if(!l) break;
-      if(l.bookIds.includes(bid)) l.bookIds = l.bookIds.filter(x=>x!==bid);
+      const wasIn = l.bookIds.includes(bid);
+      if(wasIn) l.bookIds = l.bookIds.filter(x=>x!==bid);
       else l.bookIds.push(bid);
-      try{ await Store.save(); render(); openListPicker(bid); }catch(e){}
+      try{
+        await Store.save();
+        const row = el.closest('[data-act="toggleBookList"]');
+        if(row){
+          const right = row.querySelector('.row-right');
+          if(right){
+            right.innerHTML = wasIn
+              ? '<span class="pill st-todo">未加入</span>'
+              : '<span class="pill st-done">已加入</span>';
+          }
+        }
+        needRefreshBookDetail = true;
+      }catch(e){
+        if(wasIn) l.bookIds.push(bid);
+        else l.bookIds = l.bookIds.filter(x=>x!==bid);
+      }
       break;
     }
     case 'newListForBook': {
@@ -1674,7 +2046,11 @@ document.addEventListener('click', async (e)=>{
       if(!name) break;
       const l = {id:uid('l'), name, bookIds:[bid]};
       db.lists.push(l);
-      try{ await Store.save(); render(); openListPicker(bid); }catch(e){}
+      try{
+        await Store.save();
+        needRefreshBookDetail = true;
+        openListPicker(bid);
+      }catch(e){}
       break;
     }
 
@@ -1844,12 +2220,13 @@ document.addEventListener('click', async (e)=>{
   }
 });
 
-/* --- 输入事件（200ms 防抖） --- */
+/* --- 输入事件 --- */
 document.addEventListener('input', (e)=>{
   const tid = e.target.id;
 
   if(tid==='libSearch'){
     libFilter.q = e.target.value;
+    libVisibleCount = 10;
     debouncedInput('lib', ()=>{
       const wrap = document.getElementById('bookList');
       if(wrap) wrap.innerHTML = bookListHTML();
@@ -1899,17 +2276,51 @@ document.addEventListener('input', (e)=>{
     const v = parseFloat(e.target.value)||0;
     const out = document.getElementById('ratingOut');
     if(out) out.textContent = v>0 ? v.toFixed(1) : '未评分';
+    return;
+  }
+  if(e.target.classList && e.target.classList.contains('sub-rating')){
+    const field = e.target.dataset.field;
+    const v = parseFloat(e.target.value) || 0;
+    const out = document.getElementById('sub_' + field + '_out');
+    if(out) out.textContent = v.toFixed(1);
+    return;
+  }
+  /* v0.12.3 评分编辑面板里的滑块 */
+  if(e.target.classList && e.target.classList.contains('rate-input')){
+    const bid = e.target.dataset.bid;
+    const field = e.target.dataset.field;
+    const isTotal = e.target.dataset.isTotal === '1';
+    const val = parseFloat(e.target.value) || 0;
+
+    const b = db.books.find(x=>x.id===bid);
+    if(!b) return;
+
+    b[field] = val;
+
+    /* 更新面板内该行的数值 */
+    const out = document.getElementById(`rate_edit_${bid}_${field}`);
+    if(out){
+      if(isTotal) out.textContent = val > 0 ? val.toFixed(1) : '未评分';
+      else out.textContent = val > 0 ? val.toFixed(1) : '未评';
+      out.classList.toggle('empty', val <= 0);
+    }
+
+    /* 更新详情页展示区（如果用户在详情页） */
+    refreshRateDisplay(bid);
+
+    /* 调度保存 */
+    scheduleSaveRates(bid);
+    return;
   }
 });
 
-/* 聚焦摘录搜索框时展示最近摘录过的书 */
 document.addEventListener('focusin', (e)=>{
   if(e.target.id === 'bookPickerInput' && !e.target.value.trim()){
     renderRecentBookPicker();
   }
 });
 
-/* --- 表单提交（含防重复提交） --- */
+/* --- 表单提交 --- */
 document.addEventListener('submit', async (e)=>{
   e.preventDefault();
   const f = e.target;
@@ -1926,6 +2337,10 @@ document.addEventListener('submit', async (e)=>{
       type: g('type'),
       status: g('status') || 'todo',
       rating: parseFloat(g('rating'))||0,
+      plotScore: parseFloat(g('plotScore'))||0,
+      romanceScore: parseFloat(g('romanceScore'))||0,
+      characterScore: parseFloat(g('characterScore'))||0,
+      sexScore: parseFloat(g('sexScore'))||0,
       review: g('review').trim(),
       tags: [...f.querySelectorAll('#formTags .tag.on')].map(el=>el.dataset.name),
     };
@@ -1960,6 +2375,31 @@ document.addEventListener('submit', async (e)=>{
     }catch(err){
       f.dataset.submitting = '0';
       if(submitBtn){ submitBtn.disabled = false; submitBtn.textContent = '保存'; }
+    }
+    return;
+  }
+
+  if(f.id==='reviewEditForm'){
+    if(f.dataset.submitting === '1') return;
+    const bid = f.dataset.id;
+    const b = db.books.find(x=>x.id===bid);
+    if(!b) return;
+    const newReview = f.elements['review'].value.trim();
+    if(newReview === (b.review || '').trim()){ closeModal(); return; }
+    const old = b.review;
+    b.review = newReview;
+    b.updatedAt = Date.now();
+    f.dataset.submitting = '1';
+    const btn = f.querySelector('button[type=submit]');
+    if(btn){ btn.disabled = true; btn.textContent = '保存中…'; }
+    try{
+      await Store.save();
+      needRefreshBookDetail = true;
+      closeModal();
+    }catch(e){
+      b.review = old;
+      f.dataset.submitting = '0';
+      if(btn){ btn.disabled = false; btn.textContent = '保存'; }
     }
     return;
   }
@@ -2032,6 +2472,10 @@ document.addEventListener('change', (e)=>{
       db.books.forEach(b=>{
         if(!b.statusUpdatedAt) b.statusUpdatedAt = b.updatedAt || b.createdAt || Date.now();
         if(b.characters == null) b.characters = '';
+        if(b.plotScore == null) b.plotScore = 0;
+        if(b.romanceScore == null) b.romanceScore = 0;
+        if(b.characterScore == null) b.characterScore = 0;
+        if(b.sexScore == null) b.sexScore = 0;
       });
       lastSynced = null;
       await Store.save();
