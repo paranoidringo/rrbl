@@ -188,16 +188,17 @@ h1,h2,h3{margin:0;font-weight:600}
 .rate-total{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .total-label{font-size:13px;color:var(--sub);flex-shrink:0}
 .total-value{font-size:20px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.1px}
-.total-value.empty{font-size:15px;font-weight:400;color:var(--sub2);letter-spacing:0}
+/* 追加了 padding:0 !important 和 text-align 来防止被全站 .empty 撑开 */
+.total-value.empty{font-size:15px;font-weight:400;color:var(--sub2);letter-spacing:0;padding:0 !important;text-align:left}
 .total-max{font-size:12px;color:var(--sub);margin-left:2px;font-weight:400}
 
 .rate-total .icon-btn{margin-left:auto}
 
-.rate-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:24px;row-gap:12px}
-.rate-cell{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
-.cell-label{font-size:12px;color:var(--sub);flex-shrink:0}
-.cell-value{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg)}
-.cell-value.empty{color:var(--sub2);font-weight:400;font-size:13px}
+.rate-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:24px;row-gap:10px}
+.rate-cell{display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:22px}
+.cell-label{font-size:12px;color:var(--sub);flex-shrink:0;line-height:22px}
+.cell-value{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg);line-height:22px}
+.cell-value.empty{color:var(--sub2);font-weight:400;font-size:13px;line-height:22px;padding:0 !important;text-align:right}
 
 /* 编辑面板行 */
 .rate-row{display:flex;align-items:center;gap:10px;padding:8px 0}
@@ -207,7 +208,7 @@ h1,h2,h3{margin:0;font-weight:600}
 .rate-slider::-webkit-slider-runnable-track{height:3px;background:#eee;border-radius:2px}
 .rate-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid var(--fg);margin-top:-9px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .rate-val{width:54px;text-align:right;font-size:13px;color:#333;font-variant-numeric:tabular-nums;flex-shrink:0}
-.rate-val.empty{color:var(--sub2);font-weight:400}
+.rate-val.empty{color:var(--sub2);font-weight:400;padding:0 !important;text-align:right}
 
 .sheet-divider{height:1px;background:var(--line);margin:6px 0 4px}
 
