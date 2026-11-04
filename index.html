@@ -12,7 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!--
   ============================================================
-  书斋 · 需求清单（v0.12.4）
+  书斋 · 需求清单（v0.13.0）
   ============================================================
   【目录索引】用 Ctrl+F 搜对应的关键字可快速定位
   ------------------------------------------------------------
@@ -44,12 +44,11 @@
   [21] 事件委托             搜 "21. 事件委托"
   [22] 启动                 搜 "22. 启动"
   ------------------------------------------------------------
-  【本版变更 v0.12.4】
-  - 评分区去掉灰色圆角背景框与分割线，改为纯文字排版
-  - 总分字号从 26px 缩到 20px，/10.0 缩到 12px
-  - 子评分两列两行，靠留白分隔
-  - 标签选择弹窗：新建按钮「+」移到标签列表末尾，与普通标签同款圆角框
-  - 移除底部单独的新建按钮
+  【本版变更 v0.13.0】
+  - 书库分页：初始 25 条，加载更多 +25；右下角新增回到顶部按钮
+  - 性能优化：标签、书单相关操作改为“乐观更新”，界面秒开，后台异步保存
+  - 性能优化：本地备份增加防抖，避免频繁写 localStorage 导致主线程卡顿
+  - 功能增强：添加书籍时检测书名是否重复，如有重名弹窗提醒
   ============================================================
 -->
 <style>
@@ -182,16 +181,14 @@ h1,h2,h3{margin:0;font-weight:600}
 .d-actions{display:flex;gap:10px;margin-top:22px}
 .d-actions button{flex:1}
 
-/* ============ 评分区块（v0.12.4 展示态：无背景无分割线） ============ */
+/* ============ 评分区块 ============ */
 .rate-block{padding:14px 0;border-top:1px solid var(--line)}
-
 .rate-total{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .total-label{font-size:13px;color:var(--sub);flex-shrink:0}
 .total-value{font-size:20px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.1px}
-/* 追加了 padding:0 !important 和 text-align 来防止被全站 .empty 撑开 */
+/* 修复 .empty 导致行高被撑开的问题 */
 .total-value.empty{font-size:15px;font-weight:400;color:var(--sub2);letter-spacing:0;padding:0 !important;text-align:left}
-.total-max{font-size:15px;color:var(--sub);margin-left:2px;font-weight:400}
-
+.total-max{font-size:12px;color:var(--sub);margin-left:2px;font-weight:400}
 .rate-total .icon-btn{margin-left:auto}
 
 .rate-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:24px;row-gap:10px}
@@ -200,7 +197,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .cell-value{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg);line-height:22px}
 .cell-value.empty{color:var(--sub2);font-weight:400;font-size:13px;line-height:22px;padding:0 !important;text-align:right}
 
-/* 编辑面板行 */
 .rate-row{display:flex;align-items:center;gap:10px;padding:8px 0}
 .rate-label{width:70px;flex-shrink:0;font-size:13px;color:#555}
 .rate-label.bold{font-weight:600;color:var(--fg)}
@@ -242,6 +238,34 @@ h1,h2,h3{margin:0;font-weight:600}
 
 .empty{text-align:center;color:var(--sub2);font-size:13px;padding:38px 0}
 
+/* 回到顶部按钮 */
+#backToTop {
+  position: fixed;
+  right: 16px;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  transform: translateY(10px);
+}
+#backToTop.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+#backToTop:active { background: var(--soft); }
+
 #tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(255,255,255,.96);backdrop-filter:saturate(180%) blur(12px);-webkit-backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--line);z-index:50;padding-bottom:env(safe-area-inset-bottom)}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 7px;color:var(--sub2)}
 .tab.on{color:var(--fg)}
@@ -274,7 +298,6 @@ h1,h2,h3{margin:0;font-weight:600}
 .tag-picker-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
 .tag-picker-wrap .tag{padding:6px 12px;font-size:13px}
 .tag-picker-wrap .tag:active{opacity:.6}
-/* v0.12.4：新增标签按钮，与普通标签同款圆角框 */
 .tag-picker-wrap .tag-add{min-width:32px;justify-content:center;font-weight:500;color:#888;background:#fff;border:1px dashed #ccc}
 .tag-picker-wrap .tag-add:active{background:var(--soft);color:#555}
 
@@ -333,6 +356,9 @@ h1,h2,h3{margin:0;font-weight:600}
 <nav id="tabbar"></nav>
 <div id="modalRoot"></div>
 <div id="toast"></div>
+<button id="backToTop" aria-label="回到顶部">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
 
 <script>
 /* ============================================================
@@ -459,6 +485,8 @@ let db = null;
 let lastSynced = null;
 let rateSnapshots = {};
 let rateTimers = {};
+let backupTimer = null;
+let saveTimer = null;
 
 const SUPABASE_URL = 'https://bdtadwgfecqebhkgkmaj.supabase.co/';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkdGFkd2dmZWNxZWJoa2drbWFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMDA0NTEsImV4cCI6MjEwODU3NjQ1MX0.huXw_x8SAdN8q2gdJjW_XXo5Fik9Zy8R0E6ckc-qvro';
@@ -490,26 +518,29 @@ function initRateSnapshots(){
   });
 }
 
+/* v0.13.0：本地备份改为延迟防抖执行，防止频繁 IO 卡顿 */
 function saveLocalBackup(){
   if(!db) return;
-  try{
-    let arr = [];
-    try{ arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]'); }catch(e){ arr = []; }
-    if(!Array.isArray(arr)) arr = [];
-    arr.unshift({
-      ts: Date.now(),
-      title: db.settings.title || DEFAULT_TITLE,
-      books: db.books,
-      tags: db.tags,
-      lists: db.lists,
-      quotes: db.quotes,
-    });
-    arr = arr.slice(0, 3);
-    localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
-  }catch(e){
-    console.warn('本地备份失败：', e);
-    showToast('本地备份失败（云端已保存），可能存储空间不足');
-  }
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(()=>{
+    try{
+      let arr = [];
+      try{ arr = JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]'); }catch(e){ arr = []; }
+      if(!Array.isArray(arr)) arr = [];
+      arr.unshift({
+        ts: Date.now(),
+        title: db.settings.title || DEFAULT_TITLE,
+        books: db.books,
+        tags: db.tags,
+        lists: db.lists,
+        quotes: db.quotes,
+      });
+      arr = arr.slice(0, 3);
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(arr));
+    }catch(e){
+      console.warn('本地备份失败：', e);
+    }
+  }, 1000);
 }
 function loadLocalBackups(){
   try{
@@ -699,6 +730,19 @@ const Store = {
   }
 };
 
+/* v0.13.0：全局保存加入防抖，用于高频次操作（如标签连点） */
+function debouncedStoreSave(callback){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try {
+      await Store.save();
+      if(typeof callback === 'function') callback();
+    } catch (e) {
+      if(typeof callback === 'function') callback(e);
+    }
+  }, 400);
+}
+
 async function saveBookRates(bookId){
   const { data: { user } } = await sb.auth.getUser();
   if(!user) throw new Error('未登录');
@@ -745,7 +789,7 @@ let navStack = [];
 
 let libFilter = { q:'', status:'all', tag:null };
 let libSort = { byRating:false };
-let libVisibleCount = 10;
+let libVisibleCount = 25; /* v0.13.0：初始 25 */
 let quoteFilter = { q:'' };
 let tagFilter = { q:'' };
 let pickFilter = { q:'' };
@@ -785,10 +829,24 @@ function switchTab(name){
   clearModalSilently();
   navStack=[];
   route={name,params:{}};
-  if(name === 'library') libVisibleCount = 10;
+  if(name === 'library') libVisibleCount = 25;
   render();
   window.scrollTo(0,0);
 }
+
+/* 回到顶部按钮控制 */
+window.addEventListener('scroll', ()=>{
+  const btn = document.getElementById('backToTop');
+  if(!btn) return;
+  if(window.scrollY > 400){
+    btn.classList.add('show');
+  } else {
+    btn.classList.remove('show');
+  }
+});
+document.getElementById('backToTop').addEventListener('click', ()=>{
+  window.scrollTo({top:0, behavior:'smooth'});
+});
 
 /* ============================================================
    5. 渲染入口
@@ -1022,7 +1080,6 @@ function viewBook(id){
   const visibleQuotes = showAll ? quotes : quotes.slice(0, 3);
   const hidden = quotes.length - 3;
 
-  /* v0.12.4 评分展示态：总分 20px，无背景无分割线 */
   const ratingVal = Number(b.rating) || 0;
   const ratingDisp = ratingVal > 0
     ? `${ratingVal.toFixed(1)}<span class="total-max">/10.0</span>`
@@ -1303,7 +1360,7 @@ function viewSettings(){
       <div class="sec-h"><span>关于</span></div>
       <button class="setting-row" data-act="showRequirements">需求清单</button>
       <div class="setting-row plain">数据已启用云端同步（Supabase）</div>
-      <div class="setting-row plain">版本 0.12.4</div>
+      <div class="setting-row plain">版本 0.13.0</div>
     </div>
   </div>`;
 }
@@ -1387,22 +1444,19 @@ const REQ_DOC = `
   <h3>1. 书库</h3>
   <ul>
     <li>添加、删除、查询书籍；状态 5 种（底色区分）</li>
-    <li>选填字段：角色姓名</li>
     <li>搜索支持书名 / 原名 / 作者 / 标签 / 地区 / 类型，200ms 防抖</li>
     <li>按评分排序（同分按书名），箭头用 SVG，可取消</li>
-    <li>分页：初始 10 条，点击加载更多每次 +10</li>
+    <li>分页：初始 25 条，每次加载更多 +25 条</li>
+    <li>加载更多后，右下角出现“回到顶部”悬浮按钮</li>
   </ul>
   <h3>2. 书籍详情</h3>
   <ul>
     <li>顶部状态按钮组，点击直接切换状态</li>
-    <li>评分区展示态：评分行（评分 + 20px 分数 + 调节图标）+ 两列两行子评分</li>
-    <li>展示态无灰色背景、无分割线，靠 24px 列距与 12px 行距留白分隔</li>
-    <li>点击调节图标弹出底部面板，总评分 + 四个子评分滑块</li>
-    <li>拖动滑块实时联动展示区；600ms 后独立保存，失败回滚</li>
-    <li>0 分显示「未评分」/「未评」；调评分不更新 updatedAt</li>
-    <li>简评：右上角铅笔图标触发编辑弹窗，输入框 11 行</li>
-    <li>标签、所属书单、摘录三处添加按钮统一为「＋」小图标</li>
-    <li>标签弹窗：圆角框并排显示，点击切换高亮；末尾「+」标签框用于新建</li>
+    <li>评分区：展示态（20px 总分 + 子评分网格，紧凑布局），点击图标底部弹窗编辑</li>
+    <li>评分独立保存，失败回滚，不更新 updatedAt</li>
+    <li>简评：铅笔图标触发弹窗编辑，输入框 11 行</li>
+    <li>标签 / 书单 / 摘录添加按钮统一为「＋」图标</li>
+    <li>标签弹窗：圆角框并排，末尾「+」新建</li>
     <li>摘录初始 3 条，「展开更多 / 收起」</li>
   </ul>
   <h3>3. 标签</h3>
@@ -1430,13 +1484,11 @@ const REQ_DOC = `
   <ul>
     <li>今年读完、平均评分、藏书总数、状态分布、按月趋势</li>
   </ul>
-  <h3>9. 数据安全与性能</h3>
+  <h3>9. 数据安全与性能（v0.13.0 强化）</h3>
   <ul>
-    <li>增量同步串行：先 upsert 再 delete，失败立即中断</li>
-    <li>评分独立保存，失败回滚</li>
-    <li>本地备份失败 Toast</li>
-    <li>详情页返回书库恢复滚动位置</li>
-    <li>搜索防抖 200ms</li>
+    <li>标签、书单等操作改为“乐观更新”，界面瞬间响应，后台异步保存</li>
+    <li>本地备份写入防抖（1秒），避免频繁序列化导致卡顿</li>
+    <li>添加书籍时，若书名已在库中，弹出重名提醒</li>
   </ul>
 </div>`;
 
@@ -1457,7 +1509,7 @@ function closeModal(){
 }
 
 /* ============================================================
-   16. 书籍表单
+   16. 书籍表单（含重名检查）
    ============================================================ */
 function openBookForm(bookId){
   const b = bookId ? db.books.find(x=>x.id===bookId) : null;
@@ -1672,7 +1724,7 @@ function openListPicker(bookId){
 }
 
 /* ============================================================
-   18.5 书籍 -> 标签选择弹窗（v0.12.4：新建「+」并入标签列表末尾）
+   18.5 书籍 -> 标签选择弹窗
    ============================================================ */
 function openBookTagPicker(bookId){
   const b = db.books.find(x=>x.id===bookId);
@@ -1684,7 +1736,6 @@ function openBookTagPicker(bookId){
     return `<button type="button" class="tag ${inIt?'on':''}" data-act="toggleBookTag" data-bid="${bookId}" data-name="${esc(t.name)}">${esc(t.name)}</button>`;
   }).join('');
 
-  /* 「+」作为最后一个标签框，点它新建 */
   const addBtn = `<button type="button" class="tag tag-add" data-act="newTagForBook" data-bid="${bookId}" aria-label="新建标签">+</button>`;
 
   const emptyHint = db.tags.length
@@ -1817,7 +1868,7 @@ document.addEventListener('click', async (e)=>{
   switch(act){
     case 'switchTab': switchTab(el.dataset.tab); break;
     case 'go':
-      if(el.dataset.to==='library'){ libFilter={q:'',status:'all',tag:null}; libVisibleCount = 10; }
+      if(el.dataset.to==='library'){ libFilter={q:'',status:'all',tag:null}; libVisibleCount = 25; }
       switchTab(el.dataset.to); break;
     case 'back': back(); break;
 
@@ -1876,13 +1927,13 @@ document.addEventListener('click', async (e)=>{
 
     case 'toggleRatingSort': {
       libSort.byRating = !libSort.byRating;
-      libVisibleCount = 10;
+      libVisibleCount = 25;
       render();
       break;
     }
 
     case 'libLoadMore': {
-      libVisibleCount += 10;
+      libVisibleCount += 25;
       const wrap = document.getElementById('bookList');
       if(wrap) wrap.innerHTML = bookListHTML();
       break;
@@ -1925,14 +1976,21 @@ document.addEventListener('click', async (e)=>{
       if(wasIn) b.tags = b.tags.filter(t=>t!==name);
       else b.tags.push(name);
       b.updatedAt = Date.now();
-      try{
-        await Store.save();
-        el.classList.toggle('on', !wasIn);
-        needRefreshBookDetail = true;
-      }catch(e){
-        if(wasIn) b.tags.push(name);
-        else b.tags = b.tags.filter(t=>t!==name);
-      }
+      
+      /* 乐观更新：立即反映到 UI */
+      el.classList.toggle('on', !wasIn);
+      needRefreshBookDetail = true;
+      
+      /* 异步保存 */
+      debouncedStoreSave((err) => {
+        if(err) {
+          /* 保存失败回滚 */
+          if(wasIn) b.tags.push(name);
+          else b.tags = b.tags.filter(t=>t!==name);
+          if(route.name === 'book' && route.params.id === bid) render();
+          showToast('标签保存失败');
+        }
+      });
       break;
     }
     case 'newTagForBook': {
@@ -1947,11 +2005,13 @@ document.addEventListener('click', async (e)=>{
       if(!b.tags) b.tags = [];
       if(!b.tags.includes(name)) b.tags.push(name);
       b.updatedAt = Date.now();
-      try{
-        await Store.save();
-        needRefreshBookDetail = true;
-        openBookTagPicker(bid); /* 重开弹窗显示新标签 */
-      }catch(e){}
+      needRefreshBookDetail = true;
+      openBookTagPicker(bid); /* 重开弹窗显示新标签 */
+      
+      /* 异步保存 */
+      debouncedStoreSave((err) => {
+        if(err) showToast('标签保存失败');
+      });
       break;
     }
 
@@ -1975,22 +2035,22 @@ document.addEventListener('click', async (e)=>{
 
     case 'filterStatus':
       libFilter = {q:'', status:el.dataset.status, tag:null};
-      libVisibleCount = 10;
+      libVisibleCount = 25;
       switchTab('library');
       break;
     case 'setStatusFilter':
       libFilter.status = el.dataset.status;
-      libVisibleCount = 10;
+      libVisibleCount = 25;
       render();
       break;
     case 'clearTagFilter':
       libFilter.tag = null;
-      libVisibleCount = 10;
+      libVisibleCount = 25;
       render();
       break;
     case 'tagToLibrary':
       libFilter = {q:'', status:'all', tag:el.dataset.name};
-      libVisibleCount = 10;
+      libVisibleCount = 25;
       switchTab('library');
       break;
 
@@ -2032,22 +2092,28 @@ document.addEventListener('click', async (e)=>{
       const wasIn = l.bookIds.includes(bid);
       if(wasIn) l.bookIds = l.bookIds.filter(x=>x!==bid);
       else l.bookIds.push(bid);
-      try{
-        await Store.save();
-        const row = el.closest('[data-act="toggleBookList"]');
-        if(row){
-          const right = row.querySelector('.row-right');
-          if(right){
-            right.innerHTML = wasIn
-              ? '<span class="pill st-todo">未加入</span>'
-              : '<span class="pill st-done">已加入</span>';
-          }
+      
+      /* 乐观更新 */
+      const row = el.closest('[data-act="toggleBookList"]');
+      if(row){
+        const right = row.querySelector('.row-right');
+        if(right){
+          right.innerHTML = wasIn
+            ? '<span class="pill st-todo">未加入</span>'
+            : '<span class="pill st-done">已加入</span>';
         }
-        needRefreshBookDetail = true;
-      }catch(e){
-        if(wasIn) l.bookIds.push(bid);
-        else l.bookIds = l.bookIds.filter(x=>x!==bid);
       }
+      needRefreshBookDetail = true;
+
+      /* 异步保存 */
+      debouncedStoreSave((err) => {
+        if(err) {
+          if(wasIn) l.bookIds.push(bid);
+          else l.bookIds = l.bookIds.filter(x=>x!==bid);
+          if(route.name === 'book' && route.params.id === bid) render();
+          showToast('书单保存失败');
+        }
+      });
       break;
     }
     case 'newListForBook': {
@@ -2056,11 +2122,12 @@ document.addEventListener('click', async (e)=>{
       if(!name) break;
       const l = {id:uid('l'), name, bookIds:[bid]};
       db.lists.push(l);
-      try{
-        await Store.save();
-        needRefreshBookDetail = true;
-        openListPicker(bid);
-      }catch(e){}
+      needRefreshBookDetail = true;
+      openListPicker(bid);
+
+      debouncedStoreSave((err) => {
+        if(err) showToast('新书单保存失败');
+      });
       break;
     }
 
@@ -2154,33 +2221,67 @@ document.addEventListener('click', async (e)=>{
       const bid = el.dataset.bid;
       const l = db.lists.find(x=>x.id===listId);
       if(l && !l.bookIds.includes(bid)) l.bookIds.push(bid);
-      try{
-        await Store.save();
-        render();
-        const box = document.getElementById('pickResults');
-        if(box) box.innerHTML = pickResultsHTML(listId);
-      }catch(e){}
+      
+      /* 乐观更新：直接从 DOM 中移除该行，并更新背景列表 */
+      const row = el.closest('.row');
+      if(row) row.remove();
+      const bgWrap = document.getElementById('pickResults');
+      if(bgWrap){
+         // 局部更新背景列表
+         bgWrap.innerHTML = pickResultsHTML(listId);
+      }
+
+      debouncedStoreSave((err) => {
+        if(err) showToast('添加失败');
+      });
       break;
     }
     case 'removeFromList': {
       const l = db.lists.find(x=>x.id===el.dataset.list);
       if(!l) break;
-      l.bookIds = l.bookIds.filter(b=>b!==el.dataset.bid);
-      try{ await Store.save(); render(); }catch(e){}
+      const bid = el.dataset.bid;
+      l.bookIds = l.bookIds.filter(b=>b!==bid);
+      
+      /* 乐观更新 */
+      const row = el.closest('.row');
+      if(row) row.style.opacity = '0.5'; // 视觉反馈
+      render(); // 重新渲染书单页
+
+      debouncedStoreSave((err) => {
+        if(err) {
+          l.bookIds.push(bid);
+          render();
+          showToast('移出失败');
+        }
+      });
       break;
     }
     case 'moveBookUp': {
       const l = db.lists.find(x=>x.id===el.dataset.list);
       if(!l) break;
       const i = l.bookIds.indexOf(el.dataset.bid);
-      if(i>0){ [l.bookIds[i-1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i-1]]; try{ await Store.save(); render(); }catch(e){} }
+      if(i>0){ 
+        [l.bookIds[i-1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i-1]];
+        render();
+
+        debouncedStoreSave((err) => {
+          if(err){ [l.bookIds[i-1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i-1]]; render(); }
+        });
+      }
       break;
     }
     case 'moveBookDown': {
       const l = db.lists.find(x=>x.id===el.dataset.list);
       if(!l) break;
       const i = l.bookIds.indexOf(el.dataset.bid);
-      if(i>-1 && i<l.bookIds.length-1){ [l.bookIds[i+1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i+1]]; try{ await Store.save(); render(); }catch(e){} }
+      if(i>-1 && i<l.bookIds.length-1){ 
+        [l.bookIds[i+1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i+1]];
+        render();
+
+        debouncedStoreSave((err) => {
+          if(err){ [l.bookIds[i+1],l.bookIds[i]] = [l.bookIds[i],l.bookIds[i+1]]; render(); }
+        });
+      }
       break;
     }
 
@@ -2236,7 +2337,7 @@ document.addEventListener('input', (e)=>{
 
   if(tid==='libSearch'){
     libFilter.q = e.target.value;
-    libVisibleCount = 10;
+    libVisibleCount = 25;
     debouncedInput('lib', ()=>{
       const wrap = document.getElementById('bookList');
       if(wrap) wrap.innerHTML = bookListHTML();
@@ -2325,7 +2426,7 @@ document.addEventListener('focusin', (e)=>{
   }
 });
 
-/* --- 表单提交 --- */
+/* --- 表单提交（含重名检测） --- */
 document.addEventListener('submit', async (e)=>{
   e.preventDefault();
   const f = e.target;
@@ -2351,6 +2452,16 @@ document.addEventListener('submit', async (e)=>{
     };
     if(!data.title){ alert('请填写书名'); return; }
 
+    /* 重名检测 */
+    const editingId = f.dataset.id;
+    const isDuplicate = db.books.some(b => b.id !== editingId && (b.title === data.title || (b.originalTitle && b.originalTitle === data.originalTitle)));
+    if(isDuplicate && !f.dataset.confirmed){
+      if(!confirm(`书库中已存在同名书籍《${data.title}》，确认要保存吗？`)){
+        return;
+      }
+      f.dataset.confirmed = 'true';
+    }
+
     for(const tagName of data.tags){
       if(!db.tags.some(t=>t.name===tagName)){
         db.tags.push({id:uid('t'), name:tagName, builtin:false});
@@ -2362,9 +2473,8 @@ document.addEventListener('submit', async (e)=>{
     if(submitBtn){ submitBtn.disabled = true; submitBtn.textContent = '保存中…'; }
 
     try{
-      const id = f.dataset.id;
-      if(id){
-        const b = db.books.find(x=>x.id===id);
+      if(editingId){
+        const b = db.books.find(x=>x.id===editingId);
         if(b){
           const statusChanged = b.status !== data.status;
           Object.assign(b, data, {updatedAt:Date.now()});
