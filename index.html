@@ -1682,7 +1682,7 @@ function openQuoteEditForm(quoteId){
   const q = db.quotes.find(x=>x.id===quoteId);
   if(!q) return;
   openModal(`
-    <form id="quoteEditForm" data-submitting="0">
+    <form id="quoteEditForm" data-submitting="0" data-id="${q.id}">
       <div class="modal-h">编辑摘录</div>
       <label class="field"><span>摘录 <i>*</i></span><textarea name="text" rows="6">${esc(q.text)}</textarea></label>
       <label class="field"><span>感想</span><textarea name="thought" rows="3">${esc(q.thought||'')}</textarea></label>
